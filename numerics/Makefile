@@ -12,6 +12,7 @@ TARG=code.google.com/p/tcgl/numerics
 
 GOFILES=\
 	numerics.go\
+	doc.go\
 
 include $(GOROOT)/src/Make.pkg
 

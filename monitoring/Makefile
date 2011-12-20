@@ -12,6 +12,7 @@ TARG=code.google.com/p/tcgl/monitoring
 
 GOFILES=\
 	monitoring.go\
+	doc.go\
 
 include $(GOROOT)/src/Make.pkg
 

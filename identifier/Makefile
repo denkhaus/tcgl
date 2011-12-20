@@ -11,8 +11,8 @@ include $(GOROOT)/src/Make.inc
 TARG=code.google.com/p/tcgl/identifier
 
 GOFILES=\
-	doc.go\
 	identifier.go\
+	doc.go\
 
 include $(GOROOT)/src/Make.pkg
 

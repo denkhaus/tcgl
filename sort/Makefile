@@ -12,6 +12,7 @@ TARG=code.google.com/p/tcgl/sort
 
 GOFILES=\
 	sort.go\
+	doc.go\
 
 include $(GOROOT)/src/Make.pkg
 

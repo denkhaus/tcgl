@@ -12,6 +12,7 @@ TARG=code.google.com/p/tcgl/state
 
 GOFILES=\
 	state.go\
+	doc.go\
 
 include $(GOROOT)/src/Make.pkg
 

@@ -12,6 +12,7 @@ TARG=code.google.com/p/tcgl/time
 
 GOFILES=\
 	time.go\
+	doc.go\
 
 include $(GOROOT)/src/Make.pkg
 

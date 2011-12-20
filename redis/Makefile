@@ -16,6 +16,7 @@ GOFILES=\
 	resultsets.go\
 	subscription.go\
 	util.go\
+	doc.go\
 
 include $(GOROOT)/src/Make.pkg
 

@@ -12,6 +12,7 @@ TARG=code.google.com/p/tcgl/markup
 
 GOFILES=\
 	markup.go\
+	doc.go\
 
 include $(GOROOT)/src/Make.pkg
 

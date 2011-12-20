@@ -12,6 +12,7 @@ TARG=code.google.com/p/tcgl/mapreduce
 
 GOFILES=\
 	mapreduce.go\
+	doc.go\
 
 include $(GOROOT)/src/Make.pkg
 

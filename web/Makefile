@@ -1,4 +1,4 @@
-# Tideland Common Go Library - Utilities
+# Tideland Common Go Library - Web
 #
 # Copyright 2009-2011 Frank Mueller / Oldenburg / Germany. 
 #
@@ -8,9 +8,12 @@
 
 include $(GOROOT)/src/Make.inc
 
-TARG=code.google.com/p/tcgl/util
+TARG=code.google.com/p/tcgl/web
 
 GOFILES=\
+	web.go\
+	context.go\
+	handlers.go\
 	util.go\
 	doc.go\
 
