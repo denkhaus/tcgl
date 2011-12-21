@@ -5,10 +5,9 @@
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
 
-/*
- The sort package provides a parallel quicksort. It uses the same interface
- as the standard sort package.
-*/
+// The sort package provides a parallel quicksort.
+//
+// It uses the same interface as the standard sort package.
 package sort
 
 // EOF

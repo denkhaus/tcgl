@@ -5,9 +5,8 @@
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
 
-/*
- Numerics contains some functions to do ...
-*/
+// Numerics contains some functions to support statistical
+// analyzis.
 package numerics
 
 // EOF
