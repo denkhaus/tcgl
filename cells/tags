@@ -1,0 +1,107 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.9~svn20110310	//
+Add	io.go	/^func (fo FunctionOutput) Add(hf HandlerFunc) {$/;"	f
+Behavior	cells.go	/^type Behavior interface {$/;"	t
+Cell	cells.go	/^type Cell struct {$/;"	t
+EvenFilter	cells_test.go	/^func EvenFilter(e Event) bool {$/;"	f
+Event	cells.go	/^type Event interface {$/;"	t
+EventChannel	cells.go	/^type EventChannel chan Event$/;"	t
+Filter	behaviors.go	/^type Filter func(e Event) bool$/;"	t
+FilteredSimpleActionBehavior	behaviors.go	/^type FilteredSimpleActionBehavior struct {$/;"	t
+FunctionOutput	io.go	/^type FunctionOutput []HandlerFunc$/;"	t
+GOFILES	Makefile	/^GOFILES=\\$/;"	m
+HandleEvent	cells.go	/^func (c *Cell) HandleEvent(e Event) {$/;"	f
+HandleEvent	io.go	/^func (fo FunctionOutput) HandleEvent(e Event) {$/;"	f
+HandleEvent	io.go	/^func (hf HandlerFunc) HandleEvent(e Event) {$/;"	f
+HandleEvent	io.go	/^func (i *Input) HandleEvent(e Event) {$/;"	f
+Handler	cells.go	/^type Handler interface {$/;"	t
+HandlerFunc	io.go	/^type HandlerFunc func(e Event)$/;"	t
+Input	io.go	/^type Input struct {$/;"	t
+ItoaAction	cells_test.go	/^func ItoaAction(e Event, ec EventChannel) {$/;"	f
+LogBehavior	behaviors.go	/^type LogBehavior struct {$/;"	t
+LowerThreshold	behaviors.go	/^	LowerThreshold = -1$/;"	c
+NewCell	cells.go	/^func NewCell(b Behavior, ecLen int) *Cell {$/;"	f
+NewFilteredSimpleActionBehavior	behaviors.go	/^func NewFilteredSimpleActionBehavior(f Filter, a SimpleActionFunc) *FilteredSimpleActionBehavior {$/;"	f
+NewFunctionOutput	io.go	/^func NewFunctionOutput() FunctionOutput {$/;"	f
+NewInput	io.go	/^func NewInput(ecLen int) *Input {$/;"	f
+NewLogBehavior	behaviors.go	/^func NewLogBehavior(p string, o io.Writer) *LogBehavior {$/;"	f
+NewLoggingFunctionOutput	io.go	/^func NewLoggingFunctionOutput(id string) FunctionOutput {$/;"	f
+NewSimpleEvent	cells.go	/^func NewSimpleEvent(t string, p interface{}) Event {$/;"	f
+NewStateActionBehavior	behaviors.go	/^func NewStateActionBehavior(s int, a StateActionFunc) *StateActionBehavior {$/;"	f
+NewThresholdBehavior	behaviors.go	/^func NewThresholdBehavior(ic, ut, lt, td int64, dir int) *ThresholdBehavior {$/;"	f
+NewTicker	io.go	/^func NewTicker(id string, ns int64, i *Input) *Ticker {$/;"	f
+OddFilter	cells_test.go	/^func OddFilter(e Event) bool {$/;"	f
+Payload	behaviors.go	/^func (te ThresholdEvent) Payload() interface{} {$/;"	f
+Payload	cells.go	/^func (se simpleEvent) Payload() interface{} {$/;"	f
+Payload	io.go	/^func (t TickerEvent) Payload() interface{} {$/;"	f
+ProcessEvent	behaviors.go	/^func (fsab FilteredSimpleActionBehavior) ProcessEvent(e Event, ec EventChannel) {$/;"	f
+ProcessEvent	behaviors.go	/^func (lb LogBehavior) ProcessEvent(e Event, ec EventChannel) {$/;"	f
+ProcessEvent	behaviors.go	/^func (sab *StateActionBehavior) ProcessEvent(e Event, ec EventChannel) {$/;"	f
+ProcessEvent	behaviors.go	/^func (saf SimpleActionFunc) ProcessEvent(e Event, ec EventChannel) {$/;"	f
+ProcessEvent	behaviors.go	/^func (tb *ThresholdBehavior) ProcessEvent(e Event, ec EventChannel) {$/;"	f
+RELEASE	cells.go	/^const RELEASE = "Tideland Common Go Library - Cells - Release 2011-12-22"$/;"	c
+Recover	behaviors.go	/^func (fsab FilteredSimpleActionBehavior) Recover(err interface{}, e Event) {}$/;"	f
+Recover	behaviors.go	/^func (lb *LogBehavior) Recover(err interface{}, e Event) {}$/;"	f
+Recover	behaviors.go	/^func (sab *StateActionBehavior) Recover(err interface{}, e Event) {$/;"	f
+Recover	behaviors.go	/^func (saf SimpleActionFunc) Recover(err interface{}, e Event) {$/;"	f
+Recover	behaviors.go	/^func (tb *ThresholdBehavior) Recover(err interface{}, e Event) {$/;"	f
+SeparatorAction	cells_test.go	/^func SeparatorAction(e Event, ec EventChannel) {$/;"	f
+SimpleActionFunc	behaviors.go	/^type SimpleActionFunc func(e Event, ec EventChannel)$/;"	t
+StateActionBehavior	behaviors.go	/^type StateActionBehavior struct {$/;"	t
+StateActionFunc	behaviors.go	/^type StateActionFunc func(s int, e Event, ec EventChannel) int$/;"	t
+Stop	behaviors.go	/^func (fsab FilteredSimpleActionBehavior) Stop() {}$/;"	f
+Stop	behaviors.go	/^func (lb *LogBehavior) Stop() {}$/;"	f
+Stop	behaviors.go	/^func (sab *StateActionBehavior) Stop() {}$/;"	f
+Stop	behaviors.go	/^func (saf SimpleActionFunc) Stop() {}$/;"	f
+Stop	behaviors.go	/^func (tb ThresholdBehavior) Stop() {}$/;"	f
+Stop	cells.go	/^func (c *Cell) Stop() {$/;"	f
+Stop	io.go	/^func (i *Input) Stop() {$/;"	f
+Stop	io.go	/^func (t *Ticker) Stop() {$/;"	f
+Subscribe	cells.go	/^func (c *Cell) Subscribe(h Handler) {$/;"	f
+Subscribe	io.go	/^func (i *Input) Subscribe(h Handler) {$/;"	f
+TARG	Makefile	/^TARG=code.google.com\/p\/tcgl\/cells$/;"	m
+TestSimpleScenario	cells_test.go	/^func TestSimpleScenario(t *testing.T) {$/;"	f
+TestThresholdScenario	cells_test.go	/^func TestThresholdScenario(t *testing.T) {$/;"	f
+ThresholdBehavior	behaviors.go	/^type ThresholdBehavior struct {$/;"	t
+ThresholdEvent	behaviors.go	/^type ThresholdEvent struct {$/;"	t
+ThresholdTick	behaviors.go	/^	ThresholdTick  = 0$/;"	c
+Ticker	io.go	/^type Ticker struct {$/;"	t
+TickerEvent	io.go	/^type TickerEvent struct {$/;"	t
+Topic	behaviors.go	/^func (te ThresholdEvent) Topic() string {$/;"	f
+Topic	cells.go	/^func (se simpleEvent) Topic() string {$/;"	f
+Topic	io.go	/^func (t TickerEvent) Topic() string {$/;"	f
+Unsubscribe	cells.go	/^func (c *Cell) Unsubscribe(h Handler) {$/;"	f
+Unsubscribe	io.go	/^func (i *Input) Unsubscribe(h Handler) {$/;"	f
+UpperThreshold	behaviors.go	/^	UpperThreshold = 1$/;"	c
+backend	cells.go	/^func (c *Cell) backend() {$/;"	f
+backend	io.go	/^func (i *Input) backend() {$/;"	f
+backend	io.go	/^func (t *Ticker) backend() {$/;"	f
+benchmarks	_testmain.go	/^var benchmarks = []testing.InternalBenchmark{}$/;"	v
+cells	behaviors.go	/^package cells$/;"	p
+cells	cells.go	/^package cells$/;"	p
+cells	cells_test.go	/^package cells$/;"	p
+cells	doc.go	/^package cells$/;"	p
+cells	io.go	/^package cells$/;"	p
+cells	util.go	/^package cells$/;"	p
+handle	cells.go	/^func (c *Cell) handle(e Event) {$/;"	f
+handleEvent	util.go	/^func (sm subscriptionMap) handleEvent(e Event) {$/;"	f
+handlerId	util.go	/^func (sm subscriptionMap) handlerId(h Handler) uintptr {$/;"	f
+main	_testmain.go	/^func main() {$/;"	f
+main	_testmain.go	/^package main$/;"	p
+matchPat	_testmain.go	/^var matchPat string$/;"	v
+matchRe	_testmain.go	/^var matchRe *__regexp__.Regexp$/;"	v
+matchString	_testmain.go	/^func matchString(pat, str string) (result bool, err __os__.Error) {$/;"	f
+newSubscriptionMap	util.go	/^func newSubscriptionMap() subscriptionMap {$/;"	f
+secureHandleEvent	io.go	/^func (fo FunctionOutput) secureHandleEvent(h Handler, e Event) {$/;"	f
+secureHandleEvent	util.go	/^func (sm subscriptionMap) secureHandleEvent(h Handler, e Event) {$/;"	f
+simpleEvent	cells.go	/^type simpleEvent struct {$/;"	t
+stop	cells.go	/^func (c *Cell) stop() {$/;"	f
+subscribe	util.go	/^func (sm subscriptionMap) subscribe(h Handler) {$/;"	f
+subscriptionMap	util.go	/^type subscriptionMap map[uintptr]Handler$/;"	t
+tests	_testmain.go	/^var tests = []testing.InternalTest{$/;"	v
+unsubscribe	util.go	/^func (sm subscriptionMap) unsubscribe(h Handler) {$/;"	f
+unsubscribeAll	util.go	/^func (sm subscriptionMap) unsubscribeAll() {$/;"	f
