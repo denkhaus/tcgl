@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Map/Reduce - Unit Tests
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -12,11 +12,11 @@ package mapreduce
 //--------------------
 
 import (
+	"code.google.com/p/tcgl/identifier"
 	"fmt"
-	"rand"
+	"math/rand"
 	"strconv"
 	"testing"
-	"code.google.com/p/tcgl/identifier"
 )
 
 //--------------------

@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Simple Markup Language - Unit Tests
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.

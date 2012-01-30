@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Cells - Unit Tests
 //
-// Copyright (C) 2010-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2010-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -12,11 +12,11 @@ package cells
 //--------------------
 
 import (
+	"code.google.com/p/tcgl/monitoring"
 	"os"
 	"strconv"
 	"testing"
 	"time"
-	"tcgl.googlecode.com/hg/monitoring"
 )
 
 //--------------------
@@ -35,29 +35,23 @@ func TestSimpleScenario(t *testing.T) {
 	evenCell := NewCell(NewFilteredSimpleActionBehavior(EvenFilter, ItoaAction), 10)
 	oddCell := NewCell(NewFilteredSimpleActionBehavior(OddFilter, ItoaAction), 10)
 	out := NewLoggingFunctionOutput("simple:out")
-
 	// Build network.
-	in.Subscribe(sepCell)
-	sepCell.Subscribe(evenCell)
-	sepCell.Subscribe(oddCell)
-	sepCell.Subscribe(logCell)
-	evenCell.Subscribe(out)
-	evenCell.Subscribe(logCell)
-	oddCell.Subscribe(out)
-	oddCell.Subscribe(logCell)
-
+	in.Subscribe("seperator", sepCell)
+	sepCell.Subscribe("even", evenCell)
+	sepCell.Subscribe("odd", oddCell)
+	sepCell.Subscribe("log", logCell)
+	evenCell.Subscribe("out", out)
+	evenCell.Subscribe("log", logCell)
+	oddCell.Subscribe("out", out)
+	oddCell.Subscribe("log", logCell)
 	// Sending some events.
-	in.HandleEvent(NewSimpleEvent("integer", 11))
-	in.HandleEvent(NewSimpleEvent("integer", 12))
-	in.HandleEvent(NewSimpleEvent("integer", 13))
-	in.HandleEvent(NewSimpleEvent("integer", "foo"))
-	in.HandleEvent(NewSimpleEvent("string", "foo"))
-
-	time.Sleep(2e9)
-	monitoring.Monitor().MeasuringPointsPrintAll()
-	time.Sleep(1e9)
-
+	in.HandleEvent(NewSimpleEvent("integer", nil, 11))
+	in.HandleEvent(NewSimpleEvent("integer", nil, 12))
+	in.HandleEvent(NewSimpleEvent("integer", nil, 13))
+	in.HandleEvent(NewSimpleEvent("integer", nil, "foo"))
+	in.HandleEvent(NewSimpleEvent("string", nil, "foo"))
 	// Stop all cells.
+	time.Sleep(2e9)
 	oddCell.Stop()
 	evenCell.Stop()
 	sepCell.Stop()
@@ -69,29 +63,29 @@ func TestThresholdScenario(t *testing.T) {
 	in := NewInput(10)
 	tickerA := NewTicker("ticker:a", 1e9, in)
 	tickerB := NewTicker("ticker:b", 2e8, in)
-	ttoiCell := NewCell(SimpleActionFunc(func(e Event, ec EventChannel) { ec <- NewSimpleEvent("int", 1) }), 10)
+	ttoiCell := NewCell(SimpleActionFunc(func(e Event, ec EventChannel) { ec <- NewSimpleEvent("int", nil, 1) }), 10)
 	logCell := NewCell(NewLogBehavior("threshold:log", os.Stdout), 10)
 	thCell := NewCell(NewThresholdBehavior(5, 20, 0, 1, 0), 10)
-
 	// Build network.
-	in.Subscribe(logCell)
-	in.Subscribe(thCell)
-	in.Subscribe(logCell)
-	in.Subscribe(ttoiCell)
-	ttoiCell.Subscribe(thCell)
-	thCell.Subscribe(logCell)
-	thCell.Subscribe(logCell)
-
-	time.Sleep(4e9)
-	monitoring.Monitor().MeasuringPointsPrintAll()
-	time.Sleep(1e9)
-
+	in.Subscribe("log", logCell)
+	in.Subscribe("th", thCell)
+	in.Subscribe("log", logCell)
+	in.Subscribe("ttoi", ttoiCell)
+	ttoiCell.Subscribe("th", thCell)
+	thCell.Subscribe("log", logCell)
+	thCell.Subscribe("log", logCell)
 	// Stop all cells.
+	time.Sleep(2e9)
 	tickerA.Stop()
 	tickerB.Stop()
 	ttoiCell.Stop()
 	logCell.Stop()
 	thCell.Stop()
+}
+
+// TestMonitoring just prints the measuring values.
+func TestMonitoring(t *testing.T) {
+	monitoring.MeasuringPointsPrintAll()
 }
 
 //--------------------
@@ -103,7 +97,6 @@ func EvenFilter(e Event) bool {
 	if d, ok := e.Payload().(int); ok {
 		return d%2 == 0
 	}
-
 	return false
 }
 
@@ -112,7 +105,6 @@ func OddFilter(e Event) bool {
 	if d, ok := e.Payload().(int); ok {
 		return d%2 != 0
 	}
-
 	return false
 }
 
@@ -120,9 +112,9 @@ func OddFilter(e Event) bool {
 func SeparatorAction(e Event, ec EventChannel) {
 	if d, ok := e.Payload().(int); ok {
 		if d%2 == 0 {
-			ec <- NewSimpleEvent("even", d)
+			ec <- NewSimpleEvent("even", []string{"even"}, d)
 		} else {
-			ec <- NewSimpleEvent("odd", d)
+			ec <- NewSimpleEvent("odd", []string{"odd"}, d)
 		}
 	}
 }
@@ -130,10 +122,10 @@ func SeparatorAction(e Event, ec EventChannel) {
 // ItoaAction maps an integer to an asciii string.
 func ItoaAction(e Event, ec EventChannel) {
 	if d, ok := e.Payload().(int); ok {
-		ec <- NewSimpleEvent("itoa:"+e.Topic(), strconv.Itoa(d))
+		ec <- NewSimpleEvent("itoa:"+e.Topic(), nil, strconv.Itoa(d))
+	} else {
+		ec <- NewSimpleEvent("illegal-type", nil, e)
 	}
-
-	ec <- NewSimpleEvent("illegal-type", e)
 }
 
 // EOF

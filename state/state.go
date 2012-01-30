@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Finite State Machine
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -21,7 +21,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Finite State Machine - Release 2011-12-14"
+const RELEASE = "Tideland Common Go Library - Finite State Machine - Release 2012-01-23"
 
 //--------------------
 // HELPER TYPES
@@ -29,7 +29,7 @@ const RELEASE = "Tideland Common Go Library - Finite State Machine - Release 201
 
 // Condition type.
 type Condition struct {
-	Now     int64
+	Now     time.Time
 	Payload interface{}
 }
 
@@ -40,7 +40,7 @@ type transition struct {
 }
 
 // Timeout type.
-type Timeout int64
+type Timeout time.Time
 
 //--------------------
 // FINITE STATE MACHINE
@@ -59,11 +59,11 @@ type FSM struct {
 	handlerFuncs   map[string]reflect.Value
 	state          string
 	transitionChan chan *transition
-	timeoutChan    <-chan int64
+	timeoutChan    <-chan time.Time
 }
 
 // Create a new finite state machine.
-func New(h Handler, timeout int64) *FSM {
+func New(h Handler, timeout time.Duration) *FSM {
 	var bufferSize int
 
 	if timeout > 0 {
@@ -107,13 +107,11 @@ func (fsm *FSM) Send(payload interface{}) {
 }
 
 // Send a payload with no result after a given time.
-func (fsm *FSM) SendAfter(payload interface{}, ns int64) {
+func (fsm *FSM) SendAfter(payload interface{}, after time.Duration) {
 	saf := func() {
-		time.Sleep(ns)
-
+		time.Sleep(after)
 		fsm.Send(payload)
 	}
-
 	go saf()
 }
 
@@ -174,7 +172,7 @@ func (fsm *FSM) backend() {
 
 // Handle a transition.
 func (fsm *FSM) handle(t *transition) (string, bool) {
-	condition := &Condition{time.Nanoseconds(), t.payload}
+	condition := &Condition{time.Now(), t.payload}
 	handlerFunc := fsm.handlerFuncs[fsm.state]
 	handlerArgs := make([]reflect.Value, 2)
 

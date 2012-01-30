@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Identifier
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -27,7 +27,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Identifier - Release 2011-12-15"
+const RELEASE = "Tideland Common Go Library - Identifier - Release 2012-01-23"
 
 //--------------------
 // UUID
@@ -87,7 +87,7 @@ func LimitedSepIdentifier(sep string, limit bool, parts ...interface{}) string {
 	iparts := make([]string, 0)
 
 	for _, p := range parts {
-		tmp := strings.Map(func(r int) int {
+		tmp := strings.Map(func(r rune) rune {
 			// Check letter and digit.
 			if unicode.IsLetter(r) || unicode.IsDigit(r) {
 				lcr := unicode.ToLower(r)

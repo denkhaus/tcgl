@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Utilities
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -13,6 +13,7 @@ package util
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"path"
 	"reflect"
@@ -24,7 +25,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Utilities - Release 2011-09-22"
+const RELEASE = "Tideland Common Go Library - Utilities - Release 2012-01-29"
 
 //--------------------
 // DEBUGGING
@@ -127,6 +128,61 @@ func BuildLazyIntEvaluator(evalFunc EvalFunc, initState interface{}) func() int 
 	return func() int {
 		return ef().(int)
 	}
+}
+
+//--------------------
+// LOGGER
+//--------------------
+
+// Logger is the interface for different logger implementations.
+type Logger interface {
+	// Debugf logs a message at debug level.
+	Debugf(format string, args ...interface{})
+	// Infof logs a message at info level.
+	Infof(format string, args ...interface{})
+	// Warningf logs a message at warning level.
+	Warningf(format string, args ...interface{})
+	// Errorf logs a message at error level.
+	Errorf(format string, args ...interface{})
+	// Criticalf logs a message at critical level.
+	Criticalf(format string, args ...interface{})
+}
+
+// StandardLogger is a logger implementation using the log package.
+type StandardLogger struct {
+	logger *log.Logger
+}
+
+// NewStandardLogger creates a logger using the log package.
+func NewStandardLogger(out io.Writer, prefix string, flag int) *StandardLogger {
+	return &StandardLogger{
+		logger: log.New(out, prefix, flag),
+	}
+}
+
+// Debugf logs a message at debug level.
+func (sl *StandardLogger) Debugf(format string, args ...interface{}) {
+	sl.logger.Printf("[debug] "+format, args...)
+}
+
+// Infof logs a message at info level.
+func (sl *StandardLogger) Infof(format string, args ...interface{}) {
+	sl.logger.Printf("[info] "+format, args...)
+}
+
+// Warningf logs a message at warning level.
+func (sl *StandardLogger) Warningf(format string, args ...interface{}) {
+	sl.logger.Printf("[warning] "+format, args...)
+}
+
+// Errorf logs a message at error level.
+func (sl *StandardLogger) Errorf(format string, args ...interface{}) {
+	sl.logger.Printf("[error] "+format, args...)
+}
+
+// Criticalf logs a message at critical level.
+func (sl *StandardLogger) Criticalf(format string, args ...interface{}) {
+	sl.logger.Printf("[critical] "+format, args...)
 }
 
 // EOF

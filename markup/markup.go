@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Simple Markup Language
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -14,9 +14,9 @@ package markup
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"unicode"
 )
@@ -25,7 +25,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Simple Markup Language - Release 2011-12-15"
+const RELEASE = "Tideland Common Go Library - Simple Markup Language - Release 2012-01-24"
 
 //--------------------
 // PROCESSOR
@@ -215,7 +215,7 @@ func validIdentifier(id string) bool {
 
 // Control values.
 const (
-	ctrlText = iota
+	ctrlText int = iota+1
 	ctrlSpace
 	ctrlOpen
 	ctrlClose
@@ -238,7 +238,7 @@ type SmlReader struct {
 	reader *bufio.Reader
 	index  int
 	root   *TagNode
-	error  os.Error
+	error  error
 }
 
 // NewSmlReader creates a new reader for SML documents.
@@ -258,18 +258,18 @@ func NewSmlReader(reader io.Reader) *SmlReader {
 	case ctrlEOF:
 		msg := fmt.Sprintf("eof too early at index %v", sr.index)
 
-		sr.error = os.NewError(msg)
+		sr.error = errors.New(msg)
 	case ctrlInvalid:
 		msg := fmt.Sprintf("invalid rune at index %v", sr.index)
 
-		sr.error = os.NewError(msg)
+		sr.error = errors.New(msg)
 	}
 
 	return sr
 }
 
 // RootTagNode returns the root tag node of the document
-func (sr *SmlReader) RootTagNode() (*TagNode, os.Error) {
+func (sr *SmlReader) RootTagNode() (*TagNode, error) {
 	return sr.root, sr.error
 }
 
@@ -378,35 +378,35 @@ func (sr *SmlReader) readNode() (*TagNode, int) {
 }
 
 // Reads one rune of the reader.
-func (sr *SmlReader) readRune() (rune, control int) {
+func (sr *SmlReader) readRune() (r rune, ctrl int) {
 	var size int
 
-	rune, size, sr.error = sr.reader.ReadRune()
+	r, size, sr.error = sr.reader.ReadRune()
 
 	switch {
 	case size == 0:
-		return rune, ctrlEOF
-	case rune == '{':
-		return rune, ctrlOpen
-	case rune == '}':
-		return rune, ctrlClose
-	case rune == '^':
-		return rune, ctrlEscape
-	case rune >= 'a' && rune <= 'z':
-		return rune, ctrlTag
-	case rune >= 'A' && rune <= 'Z':
-		return rune, ctrlTag
-	case rune >= '0' && rune <= '9':
-		return rune, ctrlTag
-	case rune == '-':
-		return rune, ctrlTag
-	case rune == ':':
-		return rune, ctrlTag
-	case unicode.IsSpace(rune):
-		return rune, ctrlSpace
+		return r, ctrlEOF
+	case r == '{':
+		return r, ctrlOpen
+	case r == '}':
+		return r, ctrlClose
+	case r == '^':
+		return r, ctrlEscape
+	case r >= 'a' && r <= 'z':
+		return r, ctrlTag
+	case r >= 'A' && r <= 'Z':
+		return r, ctrlTag
+	case r >= '0' && r <= '9':
+		return r, ctrlTag
+	case r == '-':
+		return r, ctrlTag
+	case r == ':':
+		return r, ctrlTag
+	case unicode.IsSpace(r):
+		return r, ctrlSpace
 	}
 
-	return rune, ctrlText
+	return r, ctrlText
 }
 
 //--------------------

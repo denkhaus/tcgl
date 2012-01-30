@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Finite State Machine - Unit Tests
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -177,7 +177,7 @@ func (lh *LoginHandler) HandleStateAuthenticating(c *Condition) (string, interfa
 
 // Handler for state: "Locked".
 func (lh *LoginHandler) HandleStateLocked(c *Condition) (string, interface{}) {
-	switch pld := c.Payload.(type) {
+	switch c.Payload.(type) {
 	case *LoginPayload:
 		log.Printf("User '%v' login rejected, user is locked!", lh.userId)
 

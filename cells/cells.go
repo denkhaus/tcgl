@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Cells
 //
-// Copyright (C) 2010-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2010-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -12,16 +12,16 @@ package cells
 //--------------------
 
 import (
+	"code.google.com/p/tcgl/identifier"
+	"code.google.com/p/tcgl/monitoring"
 	"runtime"
-	"tcgl.googlecode.com/hg/identifier"
-	"tcgl.googlecode.com/hg/monitoring"
 )
 
 //--------------------
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Cells - Release 2011-12-22"
+const RELEASE = "Tideland Common Go Library - Cells - Release 2012-01-29"
 
 //--------------------
 // BASIC INTERFACES AND TYPES
@@ -36,6 +36,7 @@ type Handler interface {
 // Event is anything that has a topic and a payload.
 type Event interface {
 	Topic() string
+	Targets() []string
 	Payload() interface{}
 }
 
@@ -43,17 +44,23 @@ type Event interface {
 // wanted or needed.
 type simpleEvent struct {
 	topic   string
+	targets []string
 	payload interface{}
 }
 
 // NewSimpleEvent creates a simple event.
-func NewSimpleEvent(t string, p interface{}) Event {
-	return &simpleEvent{t, p}
+func NewSimpleEvent(t string, ts []string, p interface{}) Event {
+	return &simpleEvent{t, ts, p}
 }
 
 // Topic returns the topic of the simple event.
 func (se simpleEvent) Topic() string {
 	return se.topic
+}
+
+// Targets returns the targets of an event, nil means all targets.
+func (se simpleEvent) Targets() []string {
+	return se.targets
 }
 
 // Payload returns the payload of the simple event.
@@ -85,8 +92,8 @@ type Cell struct {
 	filtered        bool
 	subscriptions   subscriptionMap
 	eventChan       EventChannel
-	subscribeChan   chan Handler
-	unsubscribeChan chan Handler
+	subscribeChan   chan *subscription
+	unsubscribeChan chan *subscription
 	stopChan        chan bool
 	measuringId     string
 }
@@ -98,16 +105,13 @@ func NewCell(b Behavior, ecLen int) *Cell {
 		behavior:        b,
 		subscriptions:   newSubscriptionMap(),
 		eventChan:       make(EventChannel, ecLen),
-		subscribeChan:   make(chan Handler),
-		unsubscribeChan: make(chan Handler),
+		subscribeChan:   make(chan *subscription),
+		unsubscribeChan: make(chan *subscription),
 		stopChan:        make(chan bool),
 		measuringId:     identifier.Identifier("cgl", "cell", part),
 	}
-
 	runtime.SetFinalizer(c, (*Cell).stop)
-
 	go c.backend()
-
 	return c
 }
 
@@ -117,13 +121,13 @@ func (c *Cell) HandleEvent(e Event) {
 }
 
 // Subscribe a handler for emitted events.
-func (c *Cell) Subscribe(h Handler) {
-	c.subscribeChan <- h
+func (c *Cell) Subscribe(id string, h Handler) {
+	c.subscribeChan <- &subscription{id, h}
 }
 
 // Unsubscribe a handler for emitted events.
-func (c *Cell) Unsubscribe(h Handler) {
-	c.unsubscribeChan <- h
+func (c *Cell) Unsubscribe(id string) {
+	c.unsubscribeChan <- &subscription{id, nil}
 }
 
 // Stop the cell.
@@ -139,23 +143,21 @@ func (c *Cell) backend() {
 			go c.backend()
 		}
 	}()
-
 	// Main event loop.
 	for {
 		select {
 		case e := <-c.eventChan:
 			// Handle an event.
 			c.handle(e)
-		case h := <-c.subscribeChan:
+		case s := <-c.subscribeChan:
 			// Subscribe a new handler.
-			c.subscriptions.subscribe(h)
-		case h := <-c.unsubscribeChan:
+			c.subscriptions.subscribe(s)
+		case s := <-c.unsubscribeChan:
 			// Unsubscribe a handler.
-			c.subscriptions.unsubscribe(h)
+			c.subscriptions.unsubscribe(s)
 		case <-c.stopChan:
 			// Received stop signal.
 			c.stop()
-
 			return
 		}
 	}
@@ -169,25 +171,19 @@ func (c *Cell) handle(e Event) {
 			c.behavior.Recover(err, e)
 		}
 	}()
-
 	// Create a channel to let the behavior emit
 	// events to the subscribed handlers. Those
 	// will handle it in the background.
 	emitChan := make(EventChannel)
-
 	defer close(emitChan)
-
 	go func() {
 		for ee := range emitChan {
 			c.subscriptions.handleEvent(ee)
 		}
 	}()
-
 	// Handle the event inside a measuring.
-	measuring := monitoring.Monitor().BeginMeasuring(c.measuringId)
-
+	measuring := monitoring.BeginMeasuring(c.measuringId)
 	c.behavior.ProcessEvent(e, emitChan)
-
 	measuring.EndMeasuring()
 }
 

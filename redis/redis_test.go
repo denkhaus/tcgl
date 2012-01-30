@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Redis - Unit Tests
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -12,12 +12,11 @@ package redis
 //--------------------
 
 import (
-	"fmt"
-	"rand"
+	"code.google.com/p/tcgl/monitoring"
+	"code.google.com/p/tcgl/util"
+	"math/rand"
 	"testing"
 	"time"
-	"tcgl.googlecode.com/hg/monitoring"
-	"tcgl.googlecode.com/hg/util"
 )
 
 //--------------------
@@ -408,42 +407,6 @@ func TestMulti(t *testing.T) {
 	}
 }
 
-// Test mass data.
-func TestMass(t *testing.T) {
-	util.Debug("Mass ...")
-
-	rd := NewRedisDatabase(Configuration{})
-
-	for i := 0; i < 1000; i++ {
-		k := fmt.Sprintf("mass:set:%v", i)
-
-		rd.Command("set", k, i)
-	}
-}
-
-// Test long run to allow database kill.
-func TestLongRun(t *testing.T) {
-	util.Debug("Long run for database kill ...")
-
-	rd := NewRedisDatabase(Configuration{PoolSize: 5})
-
-	for i := 1; i < 120; i++ {
-		util.Debug("Long run iteration #%v ...", i)
-
-		if !rd.Command("set", "long:run", i).IsOK() {
-			t.Errorf("Long run not ok!")
-
-			return
-		}
-
-		if time.Sleep(1e9) != nil {
-			t.Errorf("Error during sleep!")
-
-			return
-		}
-	}
-}
-
 // Test transactions.
 func TestTransactions(t *testing.T) {
 	util.Debug("Transactions ...")
@@ -493,8 +456,8 @@ func TestPop(t *testing.T) {
 
 	rsAB := rdA.Command("blpop", "pop:first", 1)
 
-	if rsAB.Error().String() != "rdc: timeout" {
-		t.Errorf("Got '%v', expected 'rdc: timeout'!", rsAB.Error().String())
+	if rsAB.Error().Error() != "rdc: timeout" {
+		t.Errorf("Got '%v', expected 'rdc: timeout'!", rsAB.Error().Error())
 	}
 
 	// Set B: database with timeout.
@@ -510,16 +473,13 @@ func TestPop(t *testing.T) {
 // Test subscribe.
 func TestSubscribe(t *testing.T) {
 	util.Debug("Subscribe ...")
-
 	rd := NewRedisDatabase(Configuration{})
 	sub, err := rd.Subscribe("subscribe:one", "subscribe:two")
-
 	if err != nil {
 		t.Errorf("Can't subscribe, error is '%v'!", err)
 
 		return
 	}
-
 	go func() {
 		for sv := range sub.SubscriptionValueChan {
 			if sv == nil {
@@ -528,63 +488,47 @@ func TestSubscribe(t *testing.T) {
 				util.Debug("Published '%v' Channel '%v' Pattern '%v'", sv, sv.Channel, sv.ChannelPattern)
 			}
 		}
-
 		util.Debug("Subscription stopped!")
 	}()
-
 	if rd.Publish("subscribe:one", "1 Alpha") != 1 {
 		t.Errorf("First publishing has illegal receiver count!")
 	}
-
 	rd.Publish("subscribe:one", "1 Beta")
 	rd.Publish("subscribe:one", "1 Gamma")
 	rd.Publish("subscribe:two", "2 Alpha")
 	rd.Publish("subscribe:two", "2 Beta")
-
 	time.Sleep(1e8)
-
 	if cnt := sub.Unsubscribe("subscribe:two"); cnt != 1 {
 		t.Errorf("First unsubscribe has illegal channel (pattern) count '%v', expected '1'!", cnt)
 	}
-
 	if cnt := sub.Unsubscribe("subscribe:one"); cnt != 0 {
 		t.Errorf("Second unsubscribe has illegal channel (pattern) count '%v', expected '0'!", cnt)
 	}
-
 	if cnt := rd.Publish("subscribe:two", "2 Gamma"); cnt != 0 {
 		t.Errorf("Last publishing has illegal receiver count '%v', expected '0'!", cnt)
 	}
-
 	sub.Subscribe("subscribe:*")
-
 	rd.Publish("subscribe:one", "Pattern 1")
 	rd.Publish("subscribe:two", "Pattern 2")
-
 	time.Sleep(1e8)
-
 	sub.Stop()
 }
 
 // Test illegal databases.
 func TestIllegalDatabases(t *testing.T) {
-	util.Debug("Illegal database ...")
-
+	util.Debug("Illegal databases ...")
 	if testing.Short() {
 		return
 	}
-
+	// Test illegal database number.
 	rdA := NewRedisDatabase(Configuration{Database: 4711})
 	rsA := rdA.Command("ping")
-
-	if rsA.Error().String() != "rdc: invalid DB index" {
-		t.Errorf("Expected 'rdc: invalid DB index', got '%v'!", rsA.Error().String())
+	if rsA.Error().Error() != "rdc: invalid DB index" {
+		t.Errorf("Expected 'rdc: invalid DB index', got '%v'!", rsA.Error().Error())
 	}
-
-	util.Debug("Testing illegal address ...")
-
+	// Test illegal network address.
 	rdB := NewRedisDatabase(Configuration{Address: "192.168.100.100:12345"})
 	rsB := rdB.Command("ping")
-
 	if rsB.IsOK() {
 		t.Errorf("Expected an error!'")
 	}
@@ -592,8 +536,7 @@ func TestIllegalDatabases(t *testing.T) {
 
 // Test measuring (pure output).
 func TestMeasuring(t *testing.T) {
-	monitoring.Monitor().MeasuringPointsPrintAll()
-	time.Sleep(1e9)
+	monitoring.MeasuringPointsPrintAll()
 }
 
 // EOF

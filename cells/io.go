@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Cells - Input/Output
 //
-// Copyright (C) 2010-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2010-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -25,8 +25,8 @@ import (
 type Input struct {
 	subscriptions   subscriptionMap
 	eventChan       EventChannel
-	subscribeChan   chan Handler
-	unsubscribeChan chan Handler
+	subscribeChan   chan *subscription
+	unsubscribeChan chan *subscription
 	stopChan        chan bool
 }
 
@@ -35,13 +35,11 @@ func NewInput(ecLen int) *Input {
 	i := &Input{
 		subscriptions:   newSubscriptionMap(),
 		eventChan:       make(EventChannel, ecLen),
-		subscribeChan:   make(chan Handler),
-		unsubscribeChan: make(chan Handler),
+		subscribeChan:   make(chan *subscription),
+		unsubscribeChan: make(chan *subscription),
 		stopChan:        make(chan bool),
 	}
-
 	go i.backend()
-
 	return i
 }
 
@@ -51,13 +49,13 @@ func (i *Input) HandleEvent(e Event) {
 }
 
 // Subscribe a handler to this input.
-func (i *Input) Subscribe(h Handler) {
-	i.subscribeChan <- h
+func (i *Input) Subscribe(id string, h Handler) {
+	i.subscribeChan <- &subscription{id, h}
 }
 
 // Unsubscribe a handler from this input.
-func (i *Input) Unsubscribe(h Handler) {
-	i.unsubscribeChan <- h
+func (i *Input) Unsubscribe(id string) {
+	i.unsubscribeChan <- &subscription{id, nil}
 }
 
 // Stop the input.
@@ -73,19 +71,18 @@ func (i *Input) backend() {
 			go i.backend()
 		}
 	}()
-
 	// Main event loop.
 	for {
 		select {
 		case e := <-i.eventChan:
 			// Distribute an event.
 			i.subscriptions.handleEvent(e)
-		case h := <-i.subscribeChan:
+		case s := <-i.subscribeChan:
 			// Connect a new handler.
-			i.subscriptions.subscribe(h)
-		case h := <-i.unsubscribeChan:
+			i.subscriptions.subscribe(s)
+		case s := <-i.unsubscribeChan:
 			// Disconnect a handler.
-			i.subscriptions.unsubscribe(h)
+			i.subscriptions.unsubscribe(s)
 		case <-i.stopChan:
 			// Received stop signal.
 			return
@@ -100,12 +97,18 @@ func (i *Input) backend() {
 // TickerEvent signals a tick to ticker subscribers.
 type TickerEvent struct {
 	id   string
-	time int64
+	time time.Time
 }
 
 // Topic returns the topic of the event, here "ticker([id])".
 func (t TickerEvent) Topic() string {
 	return "ticker(" + t.id + ")"
+}
+
+// Targets returns the targets of the events, here nil for all
+// subscribers.
+func (t TickerEvent) Targets() []string {
+	return nil
 }
 
 // Payload returns the payload of the event, here the time in
@@ -124,16 +127,14 @@ type Ticker struct {
 }
 
 // NewTicker creates a new ticker.
-func NewTicker(id string, ns int64, i *Input) *Ticker {
+func NewTicker(id string, d time.Duration, i *Input) *Ticker {
 	t := &Ticker{
 		id:       id,
 		input:    i,
-		ticker:   time.NewTicker(ns),
+		ticker:   time.NewTicker(d),
 		stopChan: make(chan bool),
 	}
-
 	go t.backend()
-
 	return t
 }
 
@@ -149,11 +150,9 @@ func (t *Ticker) backend() {
 		if err := recover(); err != nil {
 			// Just restart.
 			log.Printf("[cells] restarting ticker after error: %v", err)
-
 			go t.backend()
 		}
 	}()
-
 	// Main event loop.
 	for {
 		select {
@@ -163,7 +162,6 @@ func (t *Ticker) backend() {
 		case <-t.stopChan:
 			// Received stop signal.
 			t.ticker.Stop()
-
 			return
 		}
 	}
@@ -210,16 +208,13 @@ func (fo FunctionOutput) secureHandleEvent(h Handler, e Event) {
 			log.Printf("[cells] error handling event '%s': %v", e.Topic(), err)
 		}
 	}()
-
 	h.HandleEvent(e)
 }
 
 // NewLoggingFunctionOutput creates a function output with logging as first handler.
 func NewLoggingFunctionOutput(id string) FunctionOutput {
 	fo := NewFunctionOutput()
-
 	fo.Add(func(e Event) { log.Printf("[%s] topic: '%s' / payload: '%v'", id, e.Topic(), e.Payload()) })
-
 	return fo
 }
 

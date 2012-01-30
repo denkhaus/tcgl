@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Time
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -19,7 +19,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Time - Release 2011-12-18"
+const RELEASE = "Tideland Common Go Library - Time - Release 2012-01-24"
 
 //--------------------
 // DATE AND TIME
@@ -47,9 +47,9 @@ func NsDays(count int64) int64 { return NsHours(count * 24) }
 func NsWeeks(count int64) int64 { return NsDays(count * 7) }
 
 // Test if the year of a time is in a given list.
-func YearInList(time *time.Time, years []int64) bool {
+func YearInList(time time.Time, years []int) bool {
 	for _, year := range years {
-		if time.Year == year {
+		if time.Year() == year {
 			return true
 		}
 	}
@@ -58,68 +58,98 @@ func YearInList(time *time.Time, years []int64) bool {
 }
 
 // YearInRange tests if a year of a time is in a given range.
-func YearInRange(time *time.Time, minYear, maxYear int64) bool {
-	return (minYear <= time.Year) && (time.Year <= maxYear)
+func YearInRange(time time.Time, minYear, maxYear int) bool {
+	return (minYear <= time.Year()) && (time.Year() <= maxYear)
 }
 
 // MonthInList tests if the month of a time is in a given list.
-func MonthInList(time *time.Time, months []int) bool {
-	return fieldInList(time.Month, months)
+func MonthInList(time time.Time, months []time.Month) bool {
+	for _, month := range months {
+		if time.Month() == month {
+			return true
+		}
+	}
+	return false
 }
 
 // MonthInRange tests if a month of a time is in a given range.
-func MonthInRange(time *time.Time, minMonth, maxMonth int) bool {
-	return fieldInRange(time.Month, minMonth, maxMonth)
+func MonthInRange(time time.Time, minMonth, maxMonth time.Month) bool {
+	return (minMonth <= time.Month()) && (time.Month() <= maxMonth)
 }
 
 // DayInList tests if the day of a time is in a given list.
-func DayInList(time *time.Time, days []int) bool {
-	return fieldInList(time.Day, days)
+func DayInList(time time.Time, days []int) bool {
+	for _, day := range days {
+		if time.Day() == day {
+			return true
+		}
+	}
+	return false
 }
 
 // DayInRange tests if a day of a time is in a given range.
-func DayInRange(time *time.Time, minDay, maxDay int) bool {
-	return fieldInRange(time.Day, minDay, maxDay)
+func DayInRange(time time.Time, minDay, maxDay int) bool {
+	return (minDay <= time.Day()) && (time.Day() <= maxDay)
 }
 
 // HourInList tests if the hour of a time is in a given list.
-func HourInList(time *time.Time, hours []int) bool {
-	return fieldInList(time.Hour, hours)
+func HourInList(time time.Time, hours []int) bool {
+	for _, hour := range hours {
+		if time.Hour() == hour {
+			return true
+		}
+	}
+	return false
 }
 
 // HourInRange tests if a hour of a time is in a given range.
-func HourInRange(time *time.Time, minHour, maxHour int) bool {
-	return fieldInRange(time.Hour, minHour, maxHour)
+func HourInRange(time time.Time, minHour, maxHour int) bool {
+	return (minHour <= time.Hour()) && (time.Hour() <= maxHour)
 }
 
 // MinuteInList tests if the minute of a time is in a given list.
-func MinuteInList(time *time.Time, minutes []int) bool {
-	return fieldInList(time.Minute, minutes)
+func MinuteInList(time time.Time, minutes []int) bool {
+	for _, minute := range minutes {
+		if time.Minute() == minute {
+			return true
+		}
+	}
+	return false
 }
 
 // MinuteInRange tests if a minute of a time is in a given range.
-func MinuteInRange(time *time.Time, minMinute, maxMinute int) bool {
-	return fieldInRange(time.Minute, minMinute, maxMinute)
+func MinuteInRange(time time.Time, minMinute, maxMinute int) bool {
+	return (minMinute <= time.Minute()) && (time.Minute() <= maxMinute)
 }
 
 // SecondInList tests if the second of a time is in a given list.
-func SecondInList(time *time.Time, seconds []int) bool {
-	return fieldInList(time.Second, seconds)
+func SecondInList(time time.Time, seconds []int) bool {
+	for _, second := range seconds {
+		if time.Second() == second {
+			return true
+		}
+	}
+	return false
 }
 
 // SecondInRange tests if a second of a time is in a given range.
-func SecondInRange(time *time.Time, minSecond, maxSecond int) bool {
-	return fieldInRange(time.Second, minSecond, maxSecond)
+func SecondInRange(time time.Time, minSecond, maxSecond int) bool {
+	return (minSecond <= time.Second()) && (time.Second() <= maxSecond)
 }
 
 // WeekdayInList tests if the weekday of a time is in a given list.
-func WeekdayInList(time *time.Time, weekdays []int) bool {
-	return fieldInList(time.Weekday, weekdays)
+func WeekdayInList(time time.Time, weekdays []time.Weekday) bool {
+	for _, weekday := range weekdays {
+		if time.Weekday() == weekday {
+			return true
+		}
+	}
+	return false
 }
 
 // WeekdayInRange tests if a weekday of a time is in a given range.
-func WeekdayInRange(time *time.Time, minWeekday, maxWeekday int) bool {
-	return fieldInRange(time.Weekday, minWeekday, maxWeekday)
+func WeekdayInRange(time time.Time, minWeekday, maxWeekday time.Weekday) bool {
+	return (minWeekday <= time.Weekday()) && (time.Weekday() <= maxWeekday)
 }
 
 //--------------------
@@ -132,7 +162,7 @@ type cronCommand func() bool
 // CheckFunc is the function type for checking if a job
 // shall be performed now. It also returns if a job shall
 // be deleted after execution.
-type CheckFunc func(*time.Time) (bool, bool)
+type CheckFunc func(time.Time) (bool, bool)
 
 // TaskFunc is the function type that will be performed 
 // if a jobs check func returns true.
@@ -147,13 +177,11 @@ type job struct {
 
 // checkAndPerform checks, if a job shall be performed. If true the
 // task function will be called.
-func (j *job) checkAndPerform(time *time.Time) bool {
+func (j *job) checkAndPerform(time time.Time) bool {
 	perform, delete := j.check(time)
-
 	if perform {
 		go j.task(j.id)
 	}
-
 	return perform && delete
 }
 
@@ -172,9 +200,7 @@ func NewCrontab() *Crontab {
 		commandChan: make(chan cronCommand),
 		ticker:      time.NewTicker(1e9),
 	}
-
 	go c.backend()
-
 	return c
 }
 
@@ -189,7 +215,6 @@ func (c *Crontab) Stop() {
 func (c *Crontab) AddJob(id string, cf CheckFunc, tf TaskFunc) {
 	c.commandChan <- func() bool {
 		c.jobs[id] = &job{id, cf, tf}
-
 		return false
 	}
 }
@@ -197,9 +222,7 @@ func (c *Crontab) AddJob(id string, cf CheckFunc, tf TaskFunc) {
 // DeleteJob removes a job from the server.
 func (c *Crontab) DeleteJob(id string) {
 	c.commandChan <- func() bool {
-		job, _ := c.jobs[id]
-		c.jobs[id] = job, false
-
+		delete(c.jobs, id)
 		return false
 	}
 }
@@ -224,9 +247,8 @@ func (c *Crontab) backend() {
 
 // Handle one server tick.
 func (c *Crontab) tick() {
-	now := time.UTC()
+	now := time.Now().UTC()
 	deletes := make(map[string]*job)
-
 	// Check and perform jobs.
 	for id, job := range c.jobs {
 		delete := job.checkAndPerform(now)
@@ -235,31 +257,10 @@ func (c *Crontab) tick() {
 			deletes[id] = job
 		}
 	}
-
 	// Delete those marked for deletion.
-	for id, job := range deletes {
-		c.jobs[id] = job, false
+	for id, _ := range deletes {
+		delete(c.jobs, id)
 	}
-}
-
-//--------------------
-// HELPERS
-//--------------------
-
-// fieldInList tests if a field is contained in a list.
-func fieldInList(field int, list []int) bool {
-	for _, item := range list {
-		if field == item {
-			return true
-		}
-	}
-
-	return false
-}
-
-// fieldInRange tests if a field is in a given int range.
-func fieldInRange(field int, min, max int) bool {
-	return (min <= field) && (field <= max)
 }
 
 // EOF

@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Redis - Result Sets
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -12,8 +12,9 @@ package redis
 //--------------------
 
 import (
+	"errors"
 	"fmt"
-	"os"
+
 	"strconv"
 	"strings"
 )
@@ -32,10 +33,9 @@ func (v Value) String() string {
 
 // Bool return the value as bool.
 func (v Value) Bool() bool {
-	if b, err := strconv.Atob(v.String()); err == nil {
+	if b, err := strconv.ParseBool(v.String()); err == nil {
 		return b
 	}
-
 	return false
 }
 
@@ -50,7 +50,7 @@ func (v Value) Int() int {
 
 // Int64 returns the value as int64.
 func (v Value) Int64() int64 {
-	if i, err := strconv.Atoi64(v.String()); err == nil {
+	if i, err := strconv.ParseInt(v.String(), 10, 64); err == nil {
 		return i
 	}
 
@@ -59,7 +59,7 @@ func (v Value) Int64() int64 {
 
 // Uint64 returns the value as uint64.
 func (v Value) Uint64() uint64 {
-	if i, err := strconv.Atoui64(v.String()); err == nil {
+	if i, err := strconv.ParseUint(v.String(), 10, 64); err == nil {
 		return i
 	}
 
@@ -68,7 +68,7 @@ func (v Value) Uint64() uint64 {
 
 // Float64 returns the value as float64.
 func (v Value) Float64() float64 {
-	if f, err := strconv.Atof64(v.String()); err == nil {
+	if f, err := strconv.ParseFloat(v.String(), 64); err == nil {
 		return f
 	}
 
@@ -240,24 +240,23 @@ type ResultSet struct {
 	cmd        string
 	values     []Value
 	resultSets []*ResultSet
-	error      os.Error
+	err        error
 }
 
 // newResultSet creates a result set.
 func newResultSet(cmd string) *ResultSet {
 	return &ResultSet{
-		cmd:   cmd,
-		error: os.NewError("illegal terminated command"),
+		cmd: cmd,
+		err: errors.New("illegal terminated command"),
 	}
 }
 
 // IsOK return true if the result is ok.
 func (rs *ResultSet) IsOK() bool {
-	if rs.error != nil {
-		return false
+	if rs.err == nil {
+		return true
 	}
-
-	return true
+	return false
 }
 
 // IsMulti returns true if the result set contains
@@ -412,7 +411,7 @@ func (rs *ResultSet) ResultSetAt(idx int) *ResultSet {
 	if idx < 0 || idx >= len(rs.resultSets) {
 		rs := newResultSet("none")
 
-		rs.error = os.NewError("illegal result set index")
+		rs.err = errors.New("illegal result set index")
 
 		return rs
 	}
@@ -443,13 +442,13 @@ func (rs *ResultSet) ResultSetsMap(f func(*ResultSet) interface{}) []interface{}
 
 // Error returns the error if the operation creating
 // the result set failed.
-func (rs *ResultSet) Error() os.Error {
-	return rs.error
+func (rs *ResultSet) Error() error {
+	return rs.err
 }
 
 // String returns the result set as a string.
 func (rs *ResultSet) String() string {
-	r := fmt.Sprintf("C(%v) V(%v) E(%v)", rs.cmd, rs.values, rs.error)
+	r := fmt.Sprintf("C(%v) V(%v) E(%v)", rs.cmd, rs.values, rs.err)
 
 	if rs.IsMulti() {
 		rs.ResultSetsDo(func(each *ResultSet) {

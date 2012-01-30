@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Cache - Unit Test
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -13,7 +13,6 @@ package cache
 
 import (
 	"log"
-	"os"
 	"testing"
 	"time"
 )
@@ -25,7 +24,7 @@ import (
 // Test cache.
 func TestCache(t *testing.T) {
 	ctr := 0
-	count := func() (interface{}, os.Error) {
+	count := func() (interface{}, error) {
 		ctr++
 
 		return ctr, nil

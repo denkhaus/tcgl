@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Redis - Unified Request Protocol
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -13,13 +13,14 @@ package redis
 
 import (
 	"bufio"
+	"code.google.com/p/tcgl/identifier"
+	"code.google.com/p/tcgl/monitoring"
+	"errors"
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"strings"
-	"tcgl.googlecode.com/hg/identifier"
-	"tcgl.googlecode.com/hg/monitoring"
+	"time"
 )
 
 //--------------------
@@ -46,18 +47,18 @@ type envSubscription struct {
 type envData struct {
 	length int
 	data   []byte
-	error  os.Error
+	err    error
 }
 
 // Helper for debugging.
 func (ed *envData) String() string {
-	return fmt.Sprintf("ED(%v / %s / %v)", ed.length, ed.data, ed.error)
+	return fmt.Sprintf("ED(%v / %s / %v)", ed.length, ed.data, ed.err)
 }
 
 // Envelope type for published data.
 type envPublishedData struct {
-	data  [][]byte
-	error os.Error
+	data [][]byte
+	err  error
 }
 
 //--------------------
@@ -66,7 +67,7 @@ type envPublishedData struct {
 
 // Redis unified request protocol type.
 type unifiedRequestProtocol struct {
-	conn              *net.TCPConn
+	conn              net.Conn
 	writer            *bufio.Writer
 	reader            *bufio.Reader
 	commandChan       chan *envCommand
@@ -77,20 +78,12 @@ type unifiedRequestProtocol struct {
 }
 
 // Create a new protocol.
-func newUnifiedRequestProtocol(c *Configuration) (*unifiedRequestProtocol, os.Error) {
+func newUnifiedRequestProtocol(c *Configuration) (*unifiedRequestProtocol, error) {
 	// Establish the connection.
-	tcpAddr, err := net.ResolveTCPAddr("tcp", c.Address)
-
+	conn, err := net.DialTimeout("tcp", c.Address, c.Timeout*time.Millisecond)
 	if err != nil {
 		return nil, err
 	}
-
-	conn, err := net.DialTCP("tcp", nil, tcpAddr)
-
-	if err != nil {
-		return nil, err
-	}
-
 	// Create the URP.
 	urp := &unifiedRequestProtocol{
 		conn:              conn,
@@ -102,67 +95,50 @@ func newUnifiedRequestProtocol(c *Configuration) (*unifiedRequestProtocol, os.Er
 		publishedDataChan: make(chan *envPublishedData, 5),
 		stopChan:          make(chan bool),
 	}
-
 	// Start goroutines.
 	go urp.receiver()
 	go urp.backend()
-
 	// Select database.
 	rs := newResultSet("select")
-
 	urp.command(rs, false, "select", c.Database)
-
 	if !rs.IsOK() {
 		// Connection or database is not ok, so reset.
 		urp.stop()
-
 		return nil, rs.Error()
 	}
-
 	// Authenticate if needed.
 	if c.Auth != "" {
 		rs = newResultSet("auth")
-
 		urp.command(rs, false, "auth", c.Auth)
-
 		if !rs.IsOK() {
 			// Authentication is not ok, so reset.
 			urp.stop()
-
 			return nil, rs.Error()
 		}
 	}
-
 	return urp, nil
 }
 
 // Execute a command.
 func (urp *unifiedRequestProtocol) command(rs *ResultSet, multi bool, command string, args ...interface{}) {
-	m := monitoring.Monitor().BeginMeasuring(identifier.Identifier("rdc", "command", command))
+	m := monitoring.BeginMeasuring(identifier.Identifier("rdc", "command", command))
 	doneChan := make(chan bool)
-
 	urp.commandChan <- &envCommand{rs, multi, command, args, doneChan}
-
 	<-doneChan
-
 	m.EndMeasuring()
 }
 
 // Send a subscription request.
 func (urp *unifiedRequestProtocol) subscribe(channels ...string) int {
 	countChan := make(chan int)
-
 	urp.subscriptionChan <- &envSubscription{true, channels, countChan}
-
 	return <-countChan
 }
 
 // Send an unsubscription request.
 func (urp *unifiedRequestProtocol) unsubscribe(channels ...string) int {
 	countChan := make(chan int)
-
 	urp.subscriptionChan <- &envSubscription{false, channels, countChan}
-
 	return <-countChan
 }
 
@@ -174,56 +150,44 @@ func (urp *unifiedRequestProtocol) stop() {
 // Goroutine for receiving data from the TCP connection.
 func (urp *unifiedRequestProtocol) receiver() {
 	var ed *envData
-
 	for {
 		b, err := urp.reader.ReadBytes('\n')
-
 		if err != nil {
 			urp.dataChan <- &envData{0, nil, err}
-
 			return
 		}
-
 		// Analyze first bytes.
 		switch b[0] {
 		case '+':
 			// Status reply.
 			r := b[1 : len(b)-2]
-
 			ed = &envData{len(r), r, nil}
 		case '-':
 			// Error reply.
-			ed = &envData{0, nil, os.NewError("rdc: " + string(b[5:len(b)-2]))}
+			ed = &envData{0, nil, errors.New("rdc: " + string(b[5:len(b)-2]))}
 		case ':':
 			// Integer reply.
 			r := b[1 : len(b)-2]
-
 			ed = &envData{len(r), r, nil}
 		case '$':
 			// Bulk reply, or key not found.
 			i, _ := strconv.Atoi(string(b[1 : len(b)-2]))
-
 			if i == -1 {
 				// Key not found.
-				ed = &envData{0, nil, os.NewError("rdc: key not found")}
+				ed = &envData{0, nil, errors.New("rdc: key not found")}
 			} else {
 				// Reading the data.
 				ir := i + 2
 				br := make([]byte, ir)
 				r := 0
-
 				for r < ir {
 					n, err := urp.reader.Read(br[r:])
-
 					if err != nil {
 						urp.dataChan <- &envData{0, nil, err}
-
 						return
 					}
-
 					r += n
 				}
-
 				ed = &envData{i, br[0:i], nil}
 			}
 		case '*':
@@ -231,15 +195,12 @@ func (urp *unifiedRequestProtocol) receiver() {
 			// of the replies. The caller has to do the
 			// individual calls.
 			i, _ := strconv.Atoi(string(b[1 : len(b)-2]))
-
 			ed = &envData{i, nil, nil}
 		default:
 			// Oops!
-			ed = &envData{0, nil, os.NewError("rdc: invalid received data type")}
+			ed = &envData{0, nil, errors.New("rdc: invalid received data type")}
 		}
-
 		// Send result.
-
 		urp.dataChan <- ed
 	}
 }
@@ -252,7 +213,6 @@ func (urp *unifiedRequestProtocol) backend() {
 
 		urp.conn = nil
 	}()
-
 	// Receive commands and data.
 	for {
 		select {
@@ -280,94 +240,75 @@ func (urp *unifiedRequestProtocol) handleCommand(ec *envCommand) {
 		urp.receiveReply(ec.rs, ec.multi)
 	} else {
 		// Return error.
-		ec.rs.error = err
+		ec.rs.err = err
 	}
-
 	ec.doneChan <- true
 }
 
 // Handle a subscription.
 func (urp *unifiedRequestProtocol) handleSubscription(es *envSubscription) {
 	// Prepare command.
-
 	var command string
-
 	if es.in {
 		command = "subscribe"
 	} else {
 		command = "unsubscribe"
 	}
-
 	cis, pattern := urp.prepareChannels(es.channels)
-
 	if pattern {
 		command = "p" + command
 	}
-
 	// Send the subscription request.
 	rs := newResultSet(command)
-
 	if err := urp.writeRequest(command, cis); err != nil {
 		es.countChan <- 0
-
 		return
 	}
-
 	// Receive the replies.
 	channelLen := len(es.channels)
 	rs.resultSets = make([]*ResultSet, channelLen)
-	rs.error = nil
-
+	rs.err = nil
 	for i := 0; i < channelLen; i++ {
 		rs.resultSets[i] = newResultSet(command)
-
 		urp.receiveReply(rs.resultSets[i], false)
 	}
-
 	// Get the number of subscribed channels.
 	lastResultSet := rs.ResultSetAt(channelLen - 1)
 	lastResultValue := lastResultSet.ValueAt(lastResultSet.ValueCount() - 1)
-
 	es.countChan <- int(lastResultValue.Int64())
-
 }
 
 // Handle published data.
 func (urp *unifiedRequestProtocol) handlePublishing(ed *envData) {
 	// Continue according to the initial data.
 	switch {
-	case ed.error != nil:
+	case ed.err != nil:
 		// Error.
-		urp.publishedDataChan <- &envPublishedData{nil, ed.error}
+		urp.publishedDataChan <- &envPublishedData{nil, ed.err}
 	case ed.length > 0:
 		// Multiple results as part of the one reply.
 		values := make([][]byte, ed.length)
-
 		for i := 0; i < ed.length; i++ {
 			ed := <-urp.dataChan
-
-			if ed.error != nil {
-				urp.publishedDataChan <- &envPublishedData{nil, ed.error}
+			if ed.err != nil {
+				urp.publishedDataChan <- &envPublishedData{nil, ed.err}
 			}
-
 			values[i] = ed.data
 		}
-
 		urp.publishedDataChan <- &envPublishedData{values, nil}
 	case ed.length == -1:
 		// Timeout.
-		urp.publishedDataChan <- &envPublishedData{nil, os.NewError("rdc: timeout")}
+		urp.publishedDataChan <- &envPublishedData{nil, errors.New("rdc: timeout")}
 	default:
 		// Invalid reply.
-		urp.publishedDataChan <- &envPublishedData{nil, os.NewError("rdc: invalid reply")}
+		urp.publishedDataChan <- &envPublishedData{nil, errors.New("rdc: invalid reply")}
 	}
 }
 
 // Write a request.
-func (urp *unifiedRequestProtocol) writeRequest(cmd string, args []interface{}) os.Error {
+func (urp *unifiedRequestProtocol) writeRequest(cmd string, args []interface{}) error {
 	// Calculate number of data.
 	dataNum := 1
-
 	for _, arg := range args {
 		switch typedArg := arg.(type) {
 		case Hash:
@@ -378,85 +319,68 @@ func (urp *unifiedRequestProtocol) writeRequest(cmd string, args []interface{}) 
 			dataNum++
 		}
 	}
-
 	// Write number of following data.
 	if err := urp.writeDataNumber(dataNum); err != nil {
 		return err
 	}
-
 	// Write command.
 	if err := urp.writeData([]byte(cmd)); err != nil {
 		return err
 	}
-
 	// Write arguments.
 	for _, arg := range args {
 		if err := urp.writeArgument(arg); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
 // Write the number of arguments.
-func (urp *unifiedRequestProtocol) writeDataNumber(dataLen int) os.Error {
-	b := []byte(fmt.Sprintf("*%d\r\n", dataLen))
-
-	urp.writer.Write(b)
-
+func (urp *unifiedRequestProtocol) writeDataNumber(dataLen int) error {
+	urp.writer.Write([]byte(fmt.Sprintf("*%d\r\n", dataLen)))
 	return urp.writer.Flush()
 }
 
 // Write data.
-func (urp *unifiedRequestProtocol) writeData(data []byte) os.Error {
+func (urp *unifiedRequestProtocol) writeData(data []byte) error {
 	// Write the len of the data.
 	b := []byte(fmt.Sprintf("$%d\r\n", len(data)))
-
 	if _, err := urp.writer.Write(b); err != nil {
 		return err
 	}
-
 	// Write the data.
 	if _, err := urp.writer.Write(data); err != nil {
 		return err
 	}
-
 	urp.writer.Write([]byte{'\r', '\n'})
-
 	return urp.writer.Flush()
 }
 
 // Write a request argument.
-func (urp *unifiedRequestProtocol) writeArgument(arg interface{}) os.Error {
+func (urp *unifiedRequestProtocol) writeArgument(arg interface{}) error {
 	// Little helper for converting and writing.
-	convertAndWrite := func(a interface{}) os.Error {
+	convertAndWrite := func(a interface{}) error {
 		// Convert data.
 		data := valueToBytes(a)
-
 		// Now write data.
 		if err := urp.writeData(data); err != nil {
 			return err
 		}
-
 		return nil
 	}
-
 	// Another helper for writing a hash.
-	writeHash := func(h Hash) os.Error {
+	writeHash := func(h Hash) error {
 		for k, v := range h {
 			if err := convertAndWrite(k); err != nil {
 				return err
 			}
-
 			if err := convertAndWrite(v); err != nil {
 				return err
 			}
 		}
-
 		return nil
 	}
-
 	// Switch types.
 	switch typedArg := arg.(type) {
 	case Hash:
@@ -467,13 +391,11 @@ func (urp *unifiedRequestProtocol) writeArgument(arg interface{}) os.Error {
 		if err := writeHash(typedArg.GetHash()); err != nil {
 			return err
 		}
-
 	default:
 		if err := convertAndWrite(typedArg); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -481,47 +403,40 @@ func (urp *unifiedRequestProtocol) writeArgument(arg interface{}) os.Error {
 func (urp *unifiedRequestProtocol) receiveReply(rs *ResultSet, multi bool) {
 	// Read initial data.
 	ed := <-urp.dataChan
-
 	// Continue according to the initial data.
 	switch {
-	case ed.error != nil:
+	case ed.err != nil:
 		// Error.
-		rs.error = ed.error
+		rs.err = ed.err
 	case ed.data != nil:
 		// Single result.
 		rs.values = []Value{Value(ed.data)}
-		rs.error = nil
+		rs.err = nil
 	case ed.length > 0:
 		// Multiple result sets or results.
-		rs.error = nil
-
+		rs.err = nil
 		if multi {
 			for i := 0; i < ed.length; i++ {
 				urp.receiveReply(rs.resultSets[i], false)
 			}
 		} else {
 			rs.values = make([]Value, ed.length)
-
 			for i := 0; i < ed.length; i++ {
-
 				ied := <-urp.dataChan
-
-				if ied.error != nil {
+				if ied.err != nil {
 					rs.values = nil
-					rs.error = ied.error
-
+					rs.err = ied.err
 					return
 				}
-
 				rs.values[i] = Value(ied.data)
 			}
 		}
 	case ed.length == -1:
 		// Timeout.
-		rs.error = os.NewError("rdc: timeout")
+		rs.err = errors.New("rdc: timeout")
 	default:
 		// Invalid reply.
-		rs.error = os.NewError("rdc: invalid reply")
+		rs.err = errors.New("rdc: invalid reply")
 	}
 }
 
@@ -529,15 +444,12 @@ func (urp *unifiedRequestProtocol) receiveReply(rs *ResultSet, multi bool) {
 func (urp *unifiedRequestProtocol) prepareChannels(channels []string) ([]interface{}, bool) {
 	pattern := false
 	cis := make([]interface{}, len(channels))
-
 	for idx, channel := range channels {
 		cis[idx] = channel
-
 		if strings.IndexAny(channel, "*?[") != -1 {
 			pattern = true
 		}
 	}
-
 	return cis, pattern
 }
 

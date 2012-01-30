@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Numerics
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -21,7 +21,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Numerics - Release 2011-12-18"
+const RELEASE = "Tideland Common Go Library - Numerics - Release 2012-01-23"
 
 //--------------------
 // POINT
@@ -597,7 +597,7 @@ func (lsf *LeastSquaresFunction) slope() float64 {
 		return math.NaN()
 	}
 
-	if math.Fabs(lsf.sumXX) < 10*math.SmallestNonzeroFloat64 {
+	if math.Abs(lsf.sumXX) < 10*math.SmallestNonzeroFloat64 {
 		// Not enough variation in X.
 
 		return math.NaN()

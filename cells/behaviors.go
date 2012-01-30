@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Cells - Behaviors
 //
-// Copyright (C) 2010-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2010-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -139,12 +139,6 @@ func (sab *StateActionBehavior) Stop() {}
 // THRESHOLD BEHAVIOUR
 //--------------------
 
-const (
-	UpperThreshold = 1
-	ThresholdTick  = 0
-	LowerThreshold = -1
-)
-
 // ThresholdEvent signals any threshold passing or value changing.
 type ThresholdEvent struct {
 	reason    string
@@ -155,6 +149,11 @@ type ThresholdEvent struct {
 // Topic returns the topic of the event, here "threshold([reason])".
 func (te ThresholdEvent) Topic() string {
 	return "threshold(" + te.reason + ")"
+}
+
+// Targets returns the reason of this ticker event.
+func (te ThresholdEvent) Targets() []string {
+	return []string{te.reason}
 }
 
 // Payload return the payload as an array with counter and threshold.
@@ -218,7 +217,6 @@ func (tb *ThresholdBehavior) ProcessEvent(e Event, emitChan EventChannel) {
 			tb.counter += p
 		}
 	}
-
 	// Check the counter.
 	switch {
 	case tb.counter >= tb.upperThreshold:

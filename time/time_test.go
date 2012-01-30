@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Time
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -33,14 +33,14 @@ func TestNanoseconds(t *testing.T) {
 
 // Test time containments.
 func TestTimeContainments(t *testing.T) {
-	now := time.UTC()
-	years := []int64{2008, 2009, 2010}
-	months := []int{3, 6, 9, 12}
+	now := time.Now().UTC()
+	years := []int{2008, 2009, 2010}
+	months := []time.Month{3, 6, 9, 12}
 	days := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	hours := []int{20, 21, 22, 23}
 	minutes := []int{5, 10, 15, 20, 25, 30}
 	seconds := []int{0, 15, 30, 45}
-	weekdays := []int{time.Saturday, time.Sunday}
+	weekdays := []time.Weekday{time.Saturday, time.Sunday}
 
 	t.Logf("Time is %s\n", now.Format(time.RFC822))
 	t.Logf("Year in list    : %t\n", YearInList(now, years))
@@ -62,7 +62,7 @@ func TestTimeContainments(t *testing.T) {
 // Test crontab keeping the job.
 func TestCrontabKeep(t *testing.T) {
 	c := NewCrontab()
-	cf := func(now *time.Time) (bool, bool) { return now.Seconds()%2 == 0, false }
+	cf := func(now time.Time) (bool, bool) { return now.Unix()%2 == 0, false }
 	tf := func(id string) { t.Logf("Performed 'keep job' %s\n", id) }
 
 	c.AddJob("keep", cf, tf)
@@ -75,7 +75,7 @@ func TestCrontabKeep(t *testing.T) {
 // Test crontab deleting the job.
 func TestCrontabDelete(t *testing.T) {
 	c := NewCrontab()
-	cf := func(now *time.Time) (bool, bool) { return now.Seconds()%2 == 0, true }
+	cf := func(now time.Time) (bool, bool) { return now.Unix()%2 == 0, true }
 	tf := func(id string) { t.Logf("Performed 'keep job' %s\n", id) }
 
 	c.AddJob("keep", cf, tf)

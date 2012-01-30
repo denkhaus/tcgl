@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Redis - Subscription
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -11,10 +11,7 @@ package redis
 // IMPORTS
 //--------------------
 
-import (
-	"os"
-	"runtime"
-)
+import "runtime"
 
 //--------------------
 // SUBSCRIPTION VALUE
@@ -55,7 +52,7 @@ func newSubscriptionValue(data [][]byte) *SubscriptionValue {
 // The subscription to a Redis channel.
 type Subscription struct {
 	urp                   *unifiedRequestProtocol
-	error                 os.Error
+	error                 error
 	channelCount          int
 	SubscriptionValueChan chan *SubscriptionValue
 }

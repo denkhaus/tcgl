@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Sort - Unit Tests
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -12,13 +12,13 @@ package sort
 //--------------------
 
 import (
+	"code.google.com/p/tcgl/identifier"
 	"fmt"
-	"rand"
+	"math/rand"
 	"runtime"
 	"sort"
 	"testing"
 	"time"
-	"code.google.com/p/tcgl/identifier"
 )
 
 //--------------------
@@ -48,20 +48,20 @@ func TestSort(t *testing.T) {
 	olc := generateTestOrders(25000)
 	old := generateTestOrders(25000)
 
-	ta := time.Nanoseconds()
+	ta := time.Now()
 	Sort(ola)
-	tb := time.Nanoseconds()
+	tb := time.Now()
 	sort.Sort(olb)
-	tc := time.Nanoseconds()
+	tc := time.Now()
 	insertionSort(olc, 0, len(olc)-1)
-	td := time.Nanoseconds()
+	td := time.Now()
 	sequentialQuickSort(old, 0, len(olc)-1)
-	te := time.Nanoseconds()
+	te := time.Now()
 
-	t.Logf("PQS: %v", tb-ta)
-	t.Logf(" QS: %v", tc-tb)
-	t.Logf(" IS: %v", td-tc)
-	t.Logf("SQS: %v", te-td)
+	t.Logf("PQS: %v", tb.Sub(ta))
+	t.Logf(" QS: %v", tc.Sub(tb))
+	t.Logf(" IS: %v", td.Sub(tc))
+	t.Logf("SQS: %v", te.Sub(td))
 }
 
 // Test the parallel quicksort function.

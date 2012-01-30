@@ -1,6 +1,6 @@
 // Tideland Common Go Library - Web
 //
-// Copyright (C) 2009-2011 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
@@ -12,19 +12,21 @@ package web
 //--------------------
 
 import (
+	"code.google.com/p/tcgl/identifier"
+	"code.google.com/p/tcgl/monitoring"
+	"code.google.com/p/tcgl/util"
 	"fmt"
-	"http"
 	"log"
+	"net/http"
+	"os"
 	"strings"
-	"tcgl.googlecode.com/hg/identifier"
-	"tcgl.googlecode.com/hg/monitoring"
 )
 
 //--------------------
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library -  Web - Release 2011-12-20"
+const RELEASE = "Tideland Common Go Library -  Web - Release 2012-01-29"
 
 //--------------------
 // RESOURCE HANDLER
@@ -81,6 +83,7 @@ type server struct {
 	defaultResource string
 	domains         domainMapping
 	templateCache   *templateCache
+	logger		util.Logger
 }
 
 // The central server.
@@ -97,6 +100,7 @@ func lazyCreateServer() {
 			defaultResource: "default",
 			domains:         make(domainMapping),
 			templateCache:   newTemplateCache(),
+			logger:		 util.NewStandardLogger(os.Stdout, "[rwf] ", log.Ldate|log.Ltime),
 		}
 	}
 }
@@ -106,12 +110,10 @@ func lazyCreateServer() {
 func prepareServer(address, basePath string) {
 	srv.address = address
 	srv.basePath = basePath
-
 	// Check passed parameters.
 	if srv.address == "" {
 		srv.address = ":8080"
 	}
-
 	if !strings.HasSuffix(srv.basePath, "/") {
 		srv.basePath += "/"
 	}
@@ -122,35 +124,28 @@ func prepareServer(address, basePath string) {
 func handleFunc(rw http.ResponseWriter, r *http.Request) {
 	ctx := newContext(rw, r)
 	resources := srv.domains[ctx.Domain]
-
 	if resources != nil {
 		handlers := resources[ctx.Resource]
-
 		if handlers != nil {
-			m := monitoring.Monitor().BeginMeasuring(identifier.Identifier("rwf", ctx.Domain, ctx.Resource, ctx.Request.Method))
-
+			m := monitoring.BeginMeasuring(identifier.Identifier("rwf", ctx.Domain, ctx.Resource, ctx.Request.Method))
 			for _, h := range handlers {
 				if !dispatch(ctx, h) {
 					break
 				}
 			}
-
 			m.EndMeasuring()
-
 			return
 		}
 	}
-
 	// No valid configuration, redirect to default (if not already).
 	if ctx.Domain == srv.defaultDomain && ctx.Resource == srv.defaultResource {
 		// No default handler registered.
 		msg := fmt.Sprintf("domain '%v' and resource '%v' not found!", ctx.Domain, ctx.Resource)
-
-		log.Printf("[rwf] " + msg)
+		srv.logger.Errorf(msg)
 		http.Error(ctx.ResponseWriter, msg, http.StatusNotFound)
 	} else {
 		// Redirect to default handler.
-		log.Printf("[rwf] domain '%v' and resource '%v' not found, redirecting to default.", ctx.Domain, ctx.Resource)
+		srv.logger.Infof("domain '%v' and resource '%v' not found, redirecting to default", ctx.Domain, ctx.Resource)
 		ctx.Redirect(srv.defaultDomain, srv.defaultResource, "")
 	}
 }
@@ -162,12 +157,12 @@ func dispatch(ctx *Context, h ResourceHandler) bool {
 		if err := recover(); err != nil {
 			// Shit happens! TODO: Better error handling.
 			msg := fmt.Sprintf("internal server error: '%v' in context: '%v'", err, ctx)
-
-			log.Printf("[rwf] " + msg)
+			srv.logger.Criticalf(msg)
 			http.Error(ctx.ResponseWriter, msg, http.StatusInternalServerError)
 		}
 	}()
 
+	srv.logger.Infof("dispatching %s", ctx)
 	switch ctx.Request.Method {
 	case "GET":
 		return h.Get(ctx)
@@ -184,10 +179,8 @@ func dispatch(ctx *Context, h ResourceHandler) bool {
 			return dh.Delete(ctx)
 		}
 	}
-
-	log.Printf("[rwf] illegal method '%v' for domain '%v' and resource '%v'!", ctx.Request.Method, ctx.Domain, ctx.Resource)
+	srv.logger.Errorf("method not allowed: %s", ctx)
 	http.Error(ctx.ResponseWriter, "405 method not allowed", http.StatusMethodNotAllowed)
-
 	return false
 }
 
@@ -197,7 +190,6 @@ func dispatch(ctx *Context, h ResourceHandler) bool {
 func StartServer(address, basePath string) {
 	lazyCreateServer()
 	prepareServer(address, basePath)
-
 	http.HandleFunc(srv.basePath, handleFunc)
 	http.ListenAndServe(srv.address, nil)
 }
@@ -205,7 +197,6 @@ func StartServer(address, basePath string) {
 // SetDefault configures own default domain and resource ids.
 func SetDefault(domain, resource string) {
 	lazyCreateServer()
-
 	srv.defaultDomain = domain
 	srv.defaultResource = resource
 }
@@ -215,7 +206,6 @@ func SetDefault(domain, resource string) {
 func AttachToAppEngine(basePath string) {
 	lazyCreateServer()
 	prepareServer("", basePath)
-
 	http.HandleFunc(srv.basePath, handleFunc)
 }
 
@@ -223,32 +213,21 @@ func AttachToAppEngine(basePath string) {
 // resource id. An existing one would be overwritten.
 func AddResourceHandler(domain, resource string, handler ResourceHandler) ResourceHandler {
 	lazyCreateServer()
-
 	// Map domain to resources.
 	resources := srv.domains[domain]
-
 	if resources == nil {
 		resources = make(resourceMapping)
-
 		srv.domains[domain] = resources
 	}
-
 	// Map resource to handlers.
 	handlers := resources[resource]
-
 	if handlers == nil {
 		handlers := make(handlerSlice, 1)
-
 		resources[resource] = handlers
 	}
-
-	// Add handler.
+	// Add and init handler.
 	resources[resource] = append(handlers, handler)
-
-	// Init the handler.
 	handler.Init(domain, resource)
-
-	// Return the handler for reuse.
 	return handler
 }
 
@@ -262,7 +241,6 @@ func ParseTemplate(templateId, template, contentType string) {
 // together with the content type in the cache.
 func LoadAndParseTemplate(templateId, filename, contentType string) {
 	lazyCreateServer()
-
 	srv.templateCache.loadAndParse(templateId, filename, contentType)
 }
 
@@ -271,8 +249,12 @@ func LoadAndParseTemplate(templateId, filename, contentType string) {
 // start of the server.
 func BasePath() string {
 	lazyCreateServer()
-
 	return srv.basePath
+}
+
+// SetLogger sets a new logger.
+func SetLogger(l util.Logger) {
+	srv.logger = l
 }
 
 // EOF
