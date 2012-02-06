@@ -12,7 +12,6 @@ package cells
 //--------------------
 
 import (
-	"log"
 	"time"
 )
 
@@ -149,7 +148,7 @@ func (t *Ticker) backend() {
 	defer func() {
 		if err := recover(); err != nil {
 			// Just restart.
-			log.Printf("[cells] restarting ticker after error: %v", err)
+			logger.Warningf("restarting ticker after error: %v", err)
 			go t.backend()
 		}
 	}()
@@ -205,7 +204,7 @@ func (fo FunctionOutput) HandleEvent(e Event) {
 func (fo FunctionOutput) secureHandleEvent(h Handler, e Event) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Printf("[cells] error handling event '%s': %v", e.Topic(), err)
+			logger.Errorf("cannot handle event '%s': %v", e.Topic(), err)
 		}
 	}()
 	h.HandleEvent(e)
@@ -214,7 +213,9 @@ func (fo FunctionOutput) secureHandleEvent(h Handler, e Event) {
 // NewLoggingFunctionOutput creates a function output with logging as first handler.
 func NewLoggingFunctionOutput(id string) FunctionOutput {
 	fo := NewFunctionOutput()
-	fo.Add(func(e Event) { log.Printf("[%s] topic: '%s' / payload: '%v'", id, e.Topic(), e.Payload()) })
+	fo.Add(func(e Event) { 
+		logger.Infof("[%s] topic: '%s' / payload: '%v'", id, e.Topic(), e.Payload())
+	})
 	return fo
 }
 

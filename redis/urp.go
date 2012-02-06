@@ -67,6 +67,7 @@ type envPublishedData struct {
 
 // Redis unified request protocol type.
 type unifiedRequestProtocol struct {
+	database          *RedisDatabase
 	conn              net.Conn
 	writer            *bufio.Writer
 	reader            *bufio.Reader
@@ -78,14 +79,15 @@ type unifiedRequestProtocol struct {
 }
 
 // Create a new protocol.
-func newUnifiedRequestProtocol(c *Configuration) (*unifiedRequestProtocol, error) {
+func newUnifiedRequestProtocol(rd *RedisDatabase) (*unifiedRequestProtocol, error) {
 	// Establish the connection.
-	conn, err := net.DialTimeout("tcp", c.Address, c.Timeout*time.Millisecond)
+	conn, err := net.DialTimeout("tcp", rd.configuration.Address, rd.configuration.Timeout*time.Millisecond)
 	if err != nil {
 		return nil, err
 	}
 	// Create the URP.
 	urp := &unifiedRequestProtocol{
+		database:          rd,
 		conn:              conn,
 		writer:            bufio.NewWriter(conn),
 		reader:            bufio.NewReader(conn),
@@ -100,16 +102,16 @@ func newUnifiedRequestProtocol(c *Configuration) (*unifiedRequestProtocol, error
 	go urp.backend()
 	// Select database.
 	rs := newResultSet("select")
-	urp.command(rs, false, "select", c.Database)
+	urp.command(rs, false, "select", rd.configuration.Database)
 	if !rs.IsOK() {
 		// Connection or database is not ok, so reset.
 		urp.stop()
 		return nil, rs.Error()
 	}
 	// Authenticate if needed.
-	if c.Auth != "" {
+	if rd.configuration.Auth != "" {
 		rs = newResultSet("auth")
-		urp.command(rs, false, "auth", c.Auth)
+		urp.command(rs, false, "auth", rd.configuration.Auth)
 		if !rs.IsOK() {
 			// Authentication is not ok, so reset.
 			urp.stop()
@@ -121,7 +123,7 @@ func newUnifiedRequestProtocol(c *Configuration) (*unifiedRequestProtocol, error
 
 // Execute a command.
 func (urp *unifiedRequestProtocol) command(rs *ResultSet, multi bool, command string, args ...interface{}) {
-	m := monitoring.BeginMeasuring(identifier.Identifier("rdc", "command", command))
+	m := monitoring.BeginMeasuring(identifier.Identifier("redis", "command", command))
 	doneChan := make(chan bool)
 	urp.commandChan <- &envCommand{rs, multi, command, args, doneChan}
 	<-doneChan
@@ -164,7 +166,7 @@ func (urp *unifiedRequestProtocol) receiver() {
 			ed = &envData{len(r), r, nil}
 		case '-':
 			// Error reply.
-			ed = &envData{0, nil, errors.New("rdc: " + string(b[5:len(b)-2]))}
+			ed = &envData{0, nil, errors.New("redis: " + string(b[5:len(b)-2]))}
 		case ':':
 			// Integer reply.
 			r := b[1 : len(b)-2]
@@ -174,7 +176,7 @@ func (urp *unifiedRequestProtocol) receiver() {
 			i, _ := strconv.Atoi(string(b[1 : len(b)-2]))
 			if i == -1 {
 				// Key not found.
-				ed = &envData{0, nil, errors.New("rdc: key not found")}
+				ed = &envData{0, nil, errors.New("redis: key not found")}
 			} else {
 				// Reading the data.
 				ir := i + 2
@@ -198,7 +200,7 @@ func (urp *unifiedRequestProtocol) receiver() {
 			ed = &envData{i, nil, nil}
 		default:
 			// Oops!
-			ed = &envData{0, nil, errors.New("rdc: invalid received data type")}
+			ed = &envData{0, nil, errors.New("redis: invalid received data type")}
 		}
 		// Send result.
 		urp.dataChan <- ed
@@ -242,7 +244,25 @@ func (urp *unifiedRequestProtocol) handleCommand(ec *envCommand) {
 		// Return error.
 		ec.rs.err = err
 	}
+	urp.logCommand(ec)
 	ec.doneChan <- true
+}
+
+// logCommand logs a command and its execution status.
+func (urp *unifiedRequestProtocol) logCommand(ec *envCommand) {
+	var log string
+	if ec.multi {
+		log = "multi "	
+	}
+	log += "command " + ec.command
+	for _, arg := range ec.args {
+		log = fmt.Sprintf("%s %v", log, arg)
+	}
+	if ec.rs.IsOK() {
+		urp.database.logger.Infof("%s OK", log)
+	} else {
+		urp.database.logger.Warningf("%s ERROR %v", log, ec.rs.err)		
+	}
 }
 
 // Handle a subscription.
@@ -298,10 +318,10 @@ func (urp *unifiedRequestProtocol) handlePublishing(ed *envData) {
 		urp.publishedDataChan <- &envPublishedData{values, nil}
 	case ed.length == -1:
 		// Timeout.
-		urp.publishedDataChan <- &envPublishedData{nil, errors.New("rdc: timeout")}
+		urp.publishedDataChan <- &envPublishedData{nil, errors.New("redis: timeout")}
 	default:
 		// Invalid reply.
-		urp.publishedDataChan <- &envPublishedData{nil, errors.New("rdc: invalid reply")}
+		urp.publishedDataChan <- &envPublishedData{nil, errors.New("redis: invalid reply")}
 	}
 }
 
@@ -433,10 +453,10 @@ func (urp *unifiedRequestProtocol) receiveReply(rs *ResultSet, multi bool) {
 		}
 	case ed.length == -1:
 		// Timeout.
-		rs.err = errors.New("rdc: timeout")
+		rs.err = errors.New("redis: timeout")
 	default:
 		// Invalid reply.
-		rs.err = errors.New("rdc: invalid reply")
+		rs.err = errors.New("redis: invalid reply")
 	}
 }
 

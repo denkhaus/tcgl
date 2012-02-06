@@ -16,9 +16,7 @@ import (
 	"code.google.com/p/tcgl/monitoring"
 	"code.google.com/p/tcgl/util"
 	"fmt"
-	"log"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -26,7 +24,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library -  Web - Release 2012-01-29"
+const RELEASE = "Tideland Common Go Library -  Web - Release 2012-01-30"
 
 //--------------------
 // RESOURCE HANDLER
@@ -75,7 +73,7 @@ type domainMapping map[string]resourceMapping
 // SERVER
 //--------------------
 
-// Server is the backend of the RWF.
+// Server is the backend of the web package.
 type server struct {
 	address         string
 	basePath        string
@@ -100,7 +98,7 @@ func lazyCreateServer() {
 			defaultResource: "default",
 			domains:         make(domainMapping),
 			templateCache:   newTemplateCache(),
-			logger:		 util.NewStandardLogger(os.Stdout, "[rwf] ", log.Ldate|log.Ltime),
+			logger:		 util.NewDefaultLogger("web"),
 		}
 	}
 }
@@ -119,7 +117,7 @@ func prepareServer(address, basePath string) {
 	}
 }
 
-// handleFunc is the main function of the RWF server dispatching the
+// handleFunc is the main function of the web server dispatching the
 // requests to registered resource handler.
 func handleFunc(rw http.ResponseWriter, r *http.Request) {
 	ctx := newContext(rw, r)
@@ -127,7 +125,7 @@ func handleFunc(rw http.ResponseWriter, r *http.Request) {
 	if resources != nil {
 		handlers := resources[ctx.Resource]
 		if handlers != nil {
-			m := monitoring.BeginMeasuring(identifier.Identifier("rwf", ctx.Domain, ctx.Resource, ctx.Request.Method))
+			m := monitoring.BeginMeasuring(identifier.Identifier("web", ctx.Domain, ctx.Resource, ctx.Request.Method))
 			for _, h := range handlers {
 				if !dispatch(ctx, h) {
 					break
@@ -201,7 +199,7 @@ func SetDefault(domain, resource string) {
 	srv.defaultResource = resource
 }
 
-// AttachToAppEngine initializes as attaches the RWF to the
+// AttachToAppEngine initializes as attaches the web package to the
 // Google App Engine.
 func AttachToAppEngine(basePath string) {
 	lazyCreateServer()

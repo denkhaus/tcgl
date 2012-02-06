@@ -21,7 +21,9 @@ import (
 
 // Test debug statement.
 func TestDebug(t *testing.T) {
-	Debug("Hello, I'm debugging %v!", "here")
+	Debugf("Hello, I'm debugging %v!", "here")
+	SetLogLevel(LogLevelError)
+	Debugf("Should not be shown!")
 }
 
 // Test the integer generator.

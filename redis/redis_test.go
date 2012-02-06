@@ -58,15 +58,13 @@ func (htt *hashableTestType) SetHash(h Hash) {
 
 // Test connection commands.
 func TestConnection(t *testing.T) {
-	util.Debug("Connection ...")
+	util.Debugf("Connection ...")
 
 	rd := NewRedisDatabase(Configuration{})
-
 	// Connection commands.
 	if rd.Command("echo", "Hello, World!").ValueAsString() != "Hello, World!" {
 		t.Errorf("Invalid echo result, expected 'Hello, World!'!")
 	}
-
 	if rd.Command("ping").ValueAsString() != "PONG" {
 		t.Errorf("Can't ping the server!")
 	}
@@ -74,7 +72,7 @@ func TestConnection(t *testing.T) {
 
 // Test simple value commands.
 func TestSimpleValue(t *testing.T) {
-	util.Debug("Simple value ...")
+	util.Debugf("Simple value ...")
 
 	rd := NewRedisDatabase(Configuration{})
 
@@ -165,7 +163,7 @@ func TestSimpleValue(t *testing.T) {
 
 // Test multi-key commands.
 func TestMultiple(t *testing.T) {
-	util.Debug("Multiple ...")
+	util.Debugf("Multiple ...")
 
 	rd := NewRedisDatabase(Configuration{})
 
@@ -189,7 +187,7 @@ func TestMultiple(t *testing.T) {
 
 // Test hash accessing.
 func TestHash(t *testing.T) {
-	util.Debug("Hash ...")
+	util.Debugf("Hash ...")
 
 	rd := NewRedisDatabase(Configuration{})
 
@@ -237,7 +235,7 @@ func TestHash(t *testing.T) {
 
 // Test list commands.
 func TestList(t *testing.T) {
-	util.Debug("List ...")
+	util.Debugf("List ...")
 
 	rd := NewRedisDatabase(Configuration{})
 
@@ -300,7 +298,7 @@ func TestList(t *testing.T) {
 
 // Test set commands.
 func TestSet(t *testing.T) {
-	util.Debug("Set ...")
+	util.Debugf("Set ...")
 
 	rd := NewRedisDatabase(Configuration{})
 
@@ -327,7 +325,7 @@ func TestSet(t *testing.T) {
 
 // Test asynchronous commands.
 func TestFuture(t *testing.T) {
-	util.Debug("Future ...")
+	util.Debugf("Future ...")
 
 	rd := NewRedisDatabase(Configuration{})
 	fut := rd.AsyncCommand("keys", "*")
@@ -344,7 +342,7 @@ func TestFuture(t *testing.T) {
 
 // Test complex commands.
 func TestComplex(t *testing.T) {
-	util.Debug("Complex ...")
+	util.Debugf("Complex ...")
 
 	rd := NewRedisDatabase(Configuration{})
 	rsA := rd.Command("info")
@@ -388,7 +386,7 @@ func TestComplex(t *testing.T) {
 
 // Test multi-value commands.
 func TestMulti(t *testing.T) {
-	util.Debug("Multi ...")
+	util.Debugf("Multi ...")
 
 	rd := NewRedisDatabase(Configuration{})
 
@@ -409,7 +407,7 @@ func TestMulti(t *testing.T) {
 
 // Test transactions.
 func TestTransactions(t *testing.T) {
-	util.Debug("Transactions ...")
+	util.Debugf("Transactions ...")
 
 	rd := NewRedisDatabase(Configuration{})
 	rsA := rd.MultiCommand(func(mc *MultiCommand) {
@@ -436,7 +434,7 @@ func TestTransactions(t *testing.T) {
 
 // Test pop.
 func TestPop(t *testing.T) {
-	util.Debug("Pop ...")
+	util.Debugf("Pop ...")
 
 	fooPush := func(rd *RedisDatabase) {
 		time.Sleep(1e9)
@@ -456,8 +454,8 @@ func TestPop(t *testing.T) {
 
 	rsAB := rdA.Command("blpop", "pop:first", 1)
 
-	if rsAB.Error().Error() != "rdc: timeout" {
-		t.Errorf("Got '%v', expected 'rdc: timeout'!", rsAB.Error().Error())
+	if rsAB.Error().Error() != "redis: timeout" {
+		t.Errorf("Got '%v', expected 'redis: timeout'!", rsAB.Error().Error())
 	}
 
 	// Set B: database with timeout.
@@ -472,7 +470,7 @@ func TestPop(t *testing.T) {
 
 // Test subscribe.
 func TestSubscribe(t *testing.T) {
-	util.Debug("Subscribe ...")
+	util.Debugf("Subscribe ...")
 	rd := NewRedisDatabase(Configuration{})
 	sub, err := rd.Subscribe("subscribe:one", "subscribe:two")
 	if err != nil {
@@ -483,12 +481,12 @@ func TestSubscribe(t *testing.T) {
 	go func() {
 		for sv := range sub.SubscriptionValueChan {
 			if sv == nil {
-				util.Debug("Received nil!")
+				util.Debugf("Received nil!")
 			} else {
-				util.Debug("Published '%v' Channel '%v' Pattern '%v'", sv, sv.Channel, sv.ChannelPattern)
+				util.Debugf("Published '%v' Channel '%v' Pattern '%v'", sv, sv.Channel, sv.ChannelPattern)
 			}
 		}
-		util.Debug("Subscription stopped!")
+		util.Debugf("Subscription stopped!")
 	}()
 	if rd.Publish("subscribe:one", "1 Alpha") != 1 {
 		t.Errorf("First publishing has illegal receiver count!")
@@ -516,15 +514,15 @@ func TestSubscribe(t *testing.T) {
 
 // Test illegal databases.
 func TestIllegalDatabases(t *testing.T) {
-	util.Debug("Illegal databases ...")
+	util.Debugf("Illegal databases ...")
 	if testing.Short() {
 		return
 	}
 	// Test illegal database number.
 	rdA := NewRedisDatabase(Configuration{Database: 4711})
 	rsA := rdA.Command("ping")
-	if rsA.Error().Error() != "rdc: invalid DB index" {
-		t.Errorf("Expected 'rdc: invalid DB index', got '%v'!", rsA.Error().Error())
+	if rsA.Error().Error() != "redis: invalid DB index" {
+		t.Errorf("Expected 'redis: invalid DB index', got '%v'!", rsA.Error().Error())
 	}
 	// Test illegal network address.
 	rdB := NewRedisDatabase(Configuration{Address: "192.168.100.100:12345"})

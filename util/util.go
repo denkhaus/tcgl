@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"path"
 	"reflect"
 	"runtime"
@@ -25,22 +26,23 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Utilities - Release 2012-01-29"
+const RELEASE = "Tideland Common Go Library - Utilities - Release 2012-01-30"
 
 //--------------------
 // DEBUGGING
 //--------------------
 
-// Debug prints a debug information to the log with file and line.
-func Debug(format string, args ...interface{}) {
+// Debugf prints a debug information to the log with file and line.
+func Debugf(format string, args ...interface{}) {
 	pc, file, line, _ := runtime.Caller(1)
 	_, fileName := path.Split(file)
 	funcNameParts := strings.Split(runtime.FuncForPC(pc).Name(), ".")
 	funcNamePartsIdx := len(funcNameParts) - 1
 	funcName := funcNameParts[funcNamePartsIdx]
 	info := fmt.Sprintf(format, args...)
+	logger := NewDefaultLogger("cgl")
 
-	log.Printf("[cgl] debug %s:%s:%d %v", fileName, funcName, line, info)
+	logger.Debugf("%s:%s:%d %v", fileName, funcName, line, info)
 }
 
 //--------------------
@@ -100,31 +102,25 @@ type EvalFunc func(interface{}) (interface{}, interface{})
 // Generic builder for lazy evaluators.
 func BuildLazyEvaluator(evalFunc EvalFunc, initState interface{}) func() interface{} {
 	retValChan := make(chan interface{})
-
 	loopFunc := func() {
 		var actState interface{} = initState
 		var retVal interface{}
 
 		for {
 			retVal, actState = evalFunc(actState)
-
 			retValChan <- retVal
 		}
 	}
-
 	retFunc := func() interface{} {
 		return <-retValChan
 	}
-
 	go loopFunc()
-
 	return retFunc
 }
 
 // Builder for lazy evaluators with ints as result.
 func BuildLazyIntEvaluator(evalFunc EvalFunc, initState interface{}) func() int {
 	ef := BuildLazyEvaluator(evalFunc, initState)
-
 	return func() int {
 		return ef().(int)
 	}
@@ -133,6 +129,30 @@ func BuildLazyIntEvaluator(evalFunc EvalFunc, initState interface{}) func() int 
 //--------------------
 // LOGGER
 //--------------------
+
+// Log levels to control the logging output.
+const (
+	LogLevelDebug = iota
+	LogLevelInfo
+	LogLevelWarning
+	LogLevelError
+	LogLevelCritical
+)
+
+// logLevel controls the global log level used by the logger.
+var logLevel = LogLevelDebug
+
+// LogLevel returns the global log level and can be used in
+// own implementations of the logger interface.
+func LogLevel() int {
+	return logLevel
+}
+
+// SetLogLevel sets the global log level used by the simple
+// logger.
+func SetLogLevel(level int) {
+	logLevel = level
+}
 
 // Logger is the interface for different logger implementations.
 type Logger interface {
@@ -148,40 +168,52 @@ type Logger interface {
 	Criticalf(format string, args ...interface{})
 }
 
-// StandardLogger is a logger implementation using the log package.
-type StandardLogger struct {
+// simpleLogger is a logger implementation using the log package.
+type simpleLogger struct {
 	logger *log.Logger
 }
 
-// NewStandardLogger creates a logger using the log package.
-func NewStandardLogger(out io.Writer, prefix string, flag int) *StandardLogger {
-	return &StandardLogger{
-		logger: log.New(out, prefix, flag),
-	}
+// NewSimpleLogger creates a logger using the log package.
+func NewSimpleLogger(out io.Writer, prefix string, flag int) Logger {
+	return &simpleLogger{log.New(out, "["+prefix+"] ", flag)}
+}
+
+// NewDefaultLogger create a simple logger on stdout with
+// printig of date and time.
+func NewDefaultLogger(prefix string) Logger {
+	return NewSimpleLogger(os.Stdout, prefix, log.Ldate|log.Ltime)
 }
 
 // Debugf logs a message at debug level.
-func (sl *StandardLogger) Debugf(format string, args ...interface{}) {
-	sl.logger.Printf("[debug] "+format, args...)
+func (sl simpleLogger) Debugf(format string, args ...interface{}) {
+	if logLevel <= LogLevelDebug {
+		sl.logger.Printf("[debug] "+format, args...)
+	}
 }
 
 // Infof logs a message at info level.
-func (sl *StandardLogger) Infof(format string, args ...interface{}) {
-	sl.logger.Printf("[info] "+format, args...)
+func (sl simpleLogger) Infof(format string, args ...interface{}) {
+	if logLevel <= LogLevelInfo {
+		sl.logger.Printf("[info] "+format, args...)
+	}
 }
 
 // Warningf logs a message at warning level.
-func (sl *StandardLogger) Warningf(format string, args ...interface{}) {
-	sl.logger.Printf("[warning] "+format, args...)
+func (sl simpleLogger) Warningf(format string, args ...interface{}) {
+	if logLevel <= LogLevelWarning {
+		sl.logger.Printf("[warning] "+format, args...)
+	}
 }
 
 // Errorf logs a message at error level.
-func (sl *StandardLogger) Errorf(format string, args ...interface{}) {
-	sl.logger.Printf("[error] "+format, args...)
+func (sl simpleLogger) Errorf(format string, args ...interface{}) {
+	if logLevel <= LogLevelError {
+		sl.logger.Printf("[error] "+format, args...)
+	}
 }
 
 // Criticalf logs a message at critical level.
-func (sl *StandardLogger) Criticalf(format string, args ...interface{}) {
+func (sl simpleLogger) Criticalf(format string, args ...interface{}) {
 	sl.logger.Printf("[critical] "+format, args...)
 }
 

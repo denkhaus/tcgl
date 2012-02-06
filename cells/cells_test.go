@@ -13,7 +13,6 @@ package cells
 
 import (
 	"code.google.com/p/tcgl/monitoring"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -30,7 +29,7 @@ import (
 // Test simple scenario.
 func TestSimpleScenario(t *testing.T) {
 	in := NewInput(10)
-	logCell := NewCell(NewLogBehavior("simple:log", os.Stdout), 10)
+	logCell := NewCell(NewLogBehavior("simple:log"), 10)
 	sepCell := NewCell(SimpleActionFunc(SeparatorAction), 10)
 	evenCell := NewCell(NewFilteredSimpleActionBehavior(EvenFilter, ItoaAction), 10)
 	oddCell := NewCell(NewFilteredSimpleActionBehavior(OddFilter, ItoaAction), 10)
@@ -64,7 +63,7 @@ func TestThresholdScenario(t *testing.T) {
 	tickerA := NewTicker("ticker:a", 1e9, in)
 	tickerB := NewTicker("ticker:b", 2e8, in)
 	ttoiCell := NewCell(SimpleActionFunc(func(e Event, ec EventChannel) { ec <- NewSimpleEvent("int", nil, 1) }), 10)
-	logCell := NewCell(NewLogBehavior("threshold:log", os.Stdout), 10)
+	logCell := NewCell(NewLogBehavior("threshold:log"), 10)
 	thCell := NewCell(NewThresholdBehavior(5, 20, 0, 1, 0), 10)
 	// Build network.
 	in.Subscribe("log", logCell)

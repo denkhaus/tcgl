@@ -21,7 +21,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Cells - Release 2012-01-29"
+const RELEASE = "Tideland Common Go Library - Cells - Release 2012-01-30"
 
 //--------------------
 // BASIC INTERFACES AND TYPES

@@ -12,8 +12,30 @@ package cells
 //--------------------
 
 import (
-	"log"
+	"code.google.com/p/tcgl/util"
 )
+
+//--------------------
+// LOGGING
+//--------------------
+
+// logger is the util.Logger used by cells.
+var logger util.Logger
+
+// Logger returns the configured used by cells.
+func Logger() util.Logger {
+	return logger
+}
+
+// SetLogger sets the logger that's used by cells.
+func SetLogger(l util.Logger) {
+	logger = l
+}
+
+// init configures the standard logger.
+func init() {
+	logger = util.NewDefaultLogger("cells")
+}
 
 //--------------------
 // SUBSCRIPTION MAP
@@ -74,7 +96,7 @@ func (sm subscriptionMap) handleEvent(e Event) {
 func (sm subscriptionMap) secureHandleEvent(id string, h Handler, e Event) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Printf("[cells] error in '%s' handling event '%s': %v", id, e.Topic(), err)
+			logger.Errorf("'%s' cannot handle event '%s': %v", id, e.Topic(), err)
 		}
 	}()
 	h.HandleEvent(e)

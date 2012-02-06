@@ -12,6 +12,8 @@ package redis
 //--------------------
 
 import (
+	"code.google.com/p/tcgl/util"
+	"fmt"
 	"time"
 )
 
@@ -19,7 +21,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Redis - Release 2012-01-29"
+const RELEASE = "Tideland Common Go Library - Redis - Release 2012-01-30"
 
 //--------------------
 // CONFIGURATION
@@ -43,6 +45,7 @@ type RedisDatabase struct {
 	configuration *Configuration
 	pool          chan *unifiedRequestProtocol
 	poolUsage     int
+	logger        util.Logger
 }
 
 // NewRedisDatabase create a new accessor.
@@ -52,6 +55,7 @@ func NewRedisDatabase(c Configuration) *RedisDatabase {
 	rd := &RedisDatabase{
 		configuration: &c,
 		pool:          make(chan *unifiedRequestProtocol, c.PoolSize),
+		logger:        util.NewDefaultLogger(fmt.Sprintf("redis:%s:%d", c.Address, c.Database)),
 	}
 	// Init pool with nils.
 	for i := 0; i < c.PoolSize; i++ {
@@ -119,7 +123,7 @@ func (rd *RedisDatabase) AsyncMultiCommand(f func(*MultiCommand)) *Future {
 // Subscribe to one or more channels.
 func (rd *RedisDatabase) Subscribe(channel ...string) (*Subscription, error) {
 	// URP handling.
-	urp, err := newUnifiedRequestProtocol(rd.configuration)
+	urp, err := newUnifiedRequestProtocol(rd)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +144,7 @@ func (rd *RedisDatabase) pullURP() (*unifiedRequestProtocol, error) {
 	if urp == nil {
 		// Create a new URP.
 		var err error
-		urp, err = newUnifiedRequestProtocol(rd.configuration)
+		urp, err = newUnifiedRequestProtocol(rd)
 		if err != nil {
 			return nil, err
 		}

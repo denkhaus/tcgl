@@ -12,8 +12,7 @@ package cells
 //--------------------
 
 import (
-	"io"
-	"log"
+	"code.google.com/p/tcgl/util"
 )
 
 //--------------------
@@ -22,22 +21,18 @@ import (
 
 // LogBehavior just logs events and raises nothing.
 type LogBehavior struct {
-	prefix string
-	logger *log.Logger
+	logger util.Logger
 }
 
 // NewLogBehavior creates a log cell behavior with the
 // given writer as target.
-func NewLogBehavior(p string, o io.Writer) *LogBehavior {
-	return &LogBehavior{
-		prefix: p,
-		logger: log.New(o, "", log.Ldate|log.Ltime),
-	}
+func NewLogBehavior(prefix string) *LogBehavior {
+	return &LogBehavior{util.NewDefaultLogger(prefix)}
 }
 
 // ProcessEvent processes an event.
 func (lb LogBehavior) ProcessEvent(e Event, emitChan EventChannel) {
-	lb.logger.Printf("[%v] event topic: '%s' payload: '%v'", lb.prefix, e.Topic(), e.Payload())
+	lb.logger.Infof("event topic: '%s' payload: '%v'", e.Topic(), e.Payload())
 }
 
 // Recover from an error. Can't even log, it's a logging problem.
@@ -63,7 +58,7 @@ func (saf SimpleActionFunc) ProcessEvent(e Event, emitChan EventChannel) {
 
 // Recover from an error.
 func (saf SimpleActionFunc) Recover(err interface{}, e Event) {
-	log.Printf("[cells] cannot perform simple action func: '%v'", err)
+	Logger().Infof("cannot perform simple action func: '%v'", err)
 }
 
 // Stop the behavior.
