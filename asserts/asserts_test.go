@@ -1,11 +1,11 @@
-// Tideland Common Go Library - Assert - Unit Test
+// Tideland Common Go Library - Asserts - Unit Test
 //
 // Copyright (C) 2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
 
-package assert
+package asserts
 
 //--------------------
 // IMPORTS
@@ -21,17 +21,17 @@ import (
 // FAIL FUNCS
 //--------------------
 
-// createValueAssert returns an assert with a value logging fail func.
-func createValueAssert(t *testing.T) *Assert {
-	return NewAssert(func(test Test, obtained, expected interface{}, msg string) bool {
+// createValueAsserts returns an assert with a value logging fail func.
+func createValueAsserts(t *testing.T) *Asserts {
+	return NewAsserts(func(test Test, obtained, expected interface{}, msg string) bool {
 		t.Logf("testing assert '%s' failed: '%v' <> '%v' (%s)", test, obtained, expected, msg)
 		return false
 	})
 }
 
 // createTypeAssert returns an assert with a value description (type) logging fail func.
-func createTypeAssert(t *testing.T) *Assert {
-	return NewAssert(func(test Test, obtained, expected interface{}, msg string) bool {
+func createTypeAssert(t *testing.T) *Asserts {
+	return NewAsserts(func(test Test, obtained, expected interface{}, msg string) bool {
 		t.Logf("testing assert '%s' failed: '%v' <> '%v' (%s)",
 			test, ValueDescription(obtained), ValueDescription(expected), msg)
 		return false
@@ -78,7 +78,7 @@ func TestIsNilHelper(t *testing.T) {
 
 // Test the True() assertion.
 func TestAssertTrue(t *testing.T) {
-	a := createValueAssert(t)
+	a := createValueAsserts(t)
 
 	a.True(true, "should not fail")
 	if a.True(false, "should fail and be logged") {
@@ -88,7 +88,7 @@ func TestAssertTrue(t *testing.T) {
 
 // Test the False() assertion.
 func TestAssertFalse(t *testing.T) {
-	a := createValueAssert(t)
+	a := createValueAsserts(t)
 
 	a.False(false, "should not fail")
 	if a.False(true, "should fail and be logged") {
@@ -98,7 +98,7 @@ func TestAssertFalse(t *testing.T) {
 
 // Test the Nil() assertion.
 func TestAssertNil(t *testing.T) {
-	a := createValueAssert(t)
+	a := createValueAsserts(t)
 
 	a.Nil(nil, "should not fail")
 	if a.Nil("not nil", "should fail and be logged") {
@@ -108,7 +108,7 @@ func TestAssertNil(t *testing.T) {
 
 // Test the NotNil() assertion.
 func TestAssertNotNil(t *testing.T) {
-	a := createValueAssert(t)
+	a := createValueAsserts(t)
 
 	a.NotNil("not nil", "should not fail")
 	if a.NotNil(nil, "should fail and be logged") {
@@ -118,7 +118,7 @@ func TestAssertNotNil(t *testing.T) {
 
 // Test the Equal() assertion.
 func TestAssertEqual(t *testing.T) {
-	a := createValueAssert(t)
+	a := createValueAsserts(t)
 	m := map[string]int{"one": 1, "two": 2, "three": 3}
 
 	a.Equal(nil, nil, "should not fail")
@@ -136,7 +136,7 @@ func TestAssertEqual(t *testing.T) {
 
 // Test the Different() assertion.
 func TestAssertDifferent(t *testing.T) {
-	a := createValueAssert(t)
+	a := createValueAsserts(t)
 	m := map[string]int{"one": 1, "two": 2, "three": 3}
 
 	a.Different(nil, "nil", "should not fail")
@@ -154,7 +154,7 @@ func TestAssertDifferent(t *testing.T) {
 
 // Test the Matches() assertion.
 func TestAssertMatches(t *testing.T) {
-	a := createValueAssert(t)
+	a := createValueAsserts(t)
 
 	a.Matches("this is a test", "this.*test", "should not fail")
 	a.Matches("this is 1 test", "this is [0-9] test", "should not fail")
@@ -168,7 +168,7 @@ func TestAssertMatches(t *testing.T) {
 
 // Test the ErrorMatches() assertion.
 func TestAssertErrorMatches(t *testing.T) {
-	a := createValueAssert(t)
+	a := createValueAsserts(t)
 	err := errors.New("oops, an error")
 
 	a.ErrorMatches(err, "oops, an error", "should not fail")
@@ -222,7 +222,7 @@ func TestPanicAssert(t *testing.T) {
 		}
 	}()
 
-	a := NewPanicAssert()
+	a := NewPanicAsserts()
 	foo := func() {}
 
 	a.Assignable(47, 11, "should not fail")
@@ -233,7 +233,7 @@ func TestPanicAssert(t *testing.T) {
 
 // Test the testing assert.
 func TestTestingAssert(t *testing.T) {
-	a := NewTestingAssert(t, false)
+	a := NewTestingAsserts(t, false)
 	foo := func() {}
 	bar := 4711
 

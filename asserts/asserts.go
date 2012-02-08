@@ -1,11 +1,11 @@
-// Tideland Common Go Library - Assert
+// Tideland Common Go Library - Asserts
 //
 // Copyright (C) 2012 Frank Mueller / Oldenburg / Germany
 //
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
 
-package assert
+package asserts
 
 //--------------------
 // IMPORTS
@@ -26,7 +26,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Assert - Release 2012-02-06"
+const RELEASE = "Tideland Common Go Library - Asserts - Release 2012-02-08"
 
 //--------------------
 // TEST
@@ -133,28 +133,28 @@ func generateTestingFailFunc(t *testing.T, fail bool) FailFunc {
 // ASSERT
 //--------------------
 
-// Assert instances provide the test methods.
-type Assert struct {
+// Asserts instances provide the test methods.
+type Asserts struct {
 	failFunc FailFunc
 }
 
-// NewAssert creates a new assert.
-func NewAssert(ff FailFunc) *Assert {
-	return &Assert{ff}
+// NewAsserts creates a new asserts instance.
+func NewAsserts(ff FailFunc) *Asserts {
+	return &Asserts{ff}
 }
 
-// NewPanicAssert creates a new assert which panics if an assert fails.
-func NewPanicAssert() *Assert {
-	return NewAssert(panicFailFunc)
+// NewPanicAsserts creates a new asserts instance which panics if a test fails.
+func NewPanicAsserts() *Asserts {
+	return NewAsserts(panicFailFunc)
 }
 
-// NewTestingAssert creates a new assert for use with the testing package.
-func NewTestingAssert(t *testing.T, fail bool) *Assert {
-	return NewAssert(generateTestingFailFunc(t, fail))
+// NewTestingAsserts creates a new asserts instance for use with the testing package.
+func NewTestingAsserts(t *testing.T, fail bool) *Asserts {
+	return NewAsserts(generateTestingFailFunc(t, fail))
 }
 
 // True tests if obtained is true.
-func (a Assert) True(obtained bool, msg string) bool {
+func (a Asserts) True(obtained bool, msg string) bool {
 	if obtained == false {
 		return a.failFunc(True, obtained, true, msg)
 	}
@@ -162,7 +162,7 @@ func (a Assert) True(obtained bool, msg string) bool {
 }
 
 // False tests if obtained is false.
-func (a Assert) False(obtained bool, msg string) bool {
+func (a Asserts) False(obtained bool, msg string) bool {
 	if obtained == true {
 		return a.failFunc(False, obtained, false, msg)
 	}
@@ -170,7 +170,7 @@ func (a Assert) False(obtained bool, msg string) bool {
 }
 
 // Nil tests if obtained is nil.
-func (a Assert) Nil(obtained interface{}, msg string) bool {
+func (a Asserts) Nil(obtained interface{}, msg string) bool {
 	if !isNil(obtained) {
 		return a.failFunc(Nil, obtained, nil, msg)
 	}
@@ -178,7 +178,7 @@ func (a Assert) Nil(obtained interface{}, msg string) bool {
 }
 
 // NotNil tests if obtained is not nil.
-func (a Assert) NotNil(obtained interface{}, msg string) bool {
+func (a Asserts) NotNil(obtained interface{}, msg string) bool {
 	if isNil(obtained) {
 		return a.failFunc(NotNil, obtained, nil, msg)
 	}
@@ -186,7 +186,7 @@ func (a Assert) NotNil(obtained interface{}, msg string) bool {
 }
 
 // Equal tests if expected and obtained are equal.
-func (a Assert) Equal(obtained, expected interface{}, msg string) bool {
+func (a Asserts) Equal(obtained, expected interface{}, msg string) bool {
 	if !reflect.DeepEqual(obtained, expected) {
 		return a.failFunc(Equal, obtained, expected, msg)
 	}
@@ -194,7 +194,7 @@ func (a Assert) Equal(obtained, expected interface{}, msg string) bool {
 }
 
 // Different tests if expected and obtained are different.
-func (a Assert) Different(obtained, expected interface{}, msg string) bool {
+func (a Asserts) Different(obtained, expected interface{}, msg string) bool {
 	if reflect.DeepEqual(obtained, expected) {
 		return a.failFunc(Different, obtained, expected, msg)
 	}
@@ -202,7 +202,7 @@ func (a Assert) Different(obtained, expected interface{}, msg string) bool {
 }
 
 // Matches tests if the obtained string matches a regular expression.
-func (a Assert) Matches(obtained, regex, msg string) bool {
+func (a Asserts) Matches(obtained, regex, msg string) bool {
 	matches, err := regexp.MatchString("^"+regex+"$", obtained)
 	if err != nil {
 		return a.failFunc(Matches, obtained, regex, "can't compile regex: "+err.Error())
@@ -214,7 +214,7 @@ func (a Assert) Matches(obtained, regex, msg string) bool {
 }
 
 // ErrorMatches tests if the obtained error as string matches a regular expression.
-func (a Assert) ErrorMatches(obtained error, regex, msg string) bool {
+func (a Asserts) ErrorMatches(obtained error, regex, msg string) bool {
 	matches, err := regexp.MatchString("^"+regex+"$", obtained.Error())
 	if err != nil {
 		return a.failFunc(ErrorMatches, obtained, regex, "can't compile regex: "+err.Error())
@@ -226,7 +226,7 @@ func (a Assert) ErrorMatches(obtained error, regex, msg string) bool {
 }
 
 // Implements tests if obtained implements the expected interface variable pointer.
-func (a Assert) Implements(obtained, expected interface{}, msg string) bool {
+func (a Asserts) Implements(obtained, expected interface{}, msg string) bool {
 	obtainedValue := reflect.ValueOf(obtained)
 	expectedValue := reflect.ValueOf(expected)
 	if !obtainedValue.IsValid() {
@@ -242,7 +242,7 @@ func (a Assert) Implements(obtained, expected interface{}, msg string) bool {
 }
 
 // Assignable tests if the types of expected and obtained are assignable.
-func (a Assert) Assignable(obtained, expected interface{}, msg string) bool {
+func (a Asserts) Assignable(obtained, expected interface{}, msg string) bool {
 	obtainedValue := reflect.ValueOf(obtained)
 	expectedValue := reflect.ValueOf(expected)
 	if !obtainedValue.Type().AssignableTo(expectedValue.Type()) {
@@ -252,7 +252,7 @@ func (a Assert) Assignable(obtained, expected interface{}, msg string) bool {
 }
 
 // Unassignable tests if the types of expected and obtained are not assignable.
-func (a Assert) Unassignable(obtained, expected interface{}, msg string) bool {
+func (a Asserts) Unassignable(obtained, expected interface{}, msg string) bool {
 	obtainedValue := reflect.ValueOf(obtained)
 	expectedValue := reflect.ValueOf(expected)
 	if obtainedValue.Type().AssignableTo(expectedValue.Type()) {
