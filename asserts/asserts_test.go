@@ -29,8 +29,8 @@ func createValueAsserts(t *testing.T) *Asserts {
 	})
 }
 
-// createTypeAssert returns an assert with a value description (type) logging fail func.
-func createTypeAssert(t *testing.T) *Asserts {
+// createTypeAsserts returns an assert with a value description (type) logging fail func.
+func createTypeAsserts(t *testing.T) *Asserts {
 	return NewAsserts(func(test Test, obtained, expected interface{}, msg string) bool {
 		t.Logf("testing assert '%s' failed: '%v' <> '%v' (%s)",
 			test, ValueDescription(obtained), ValueDescription(expected), msg)
@@ -42,7 +42,7 @@ func createTypeAssert(t *testing.T) *Asserts {
 // TESTS
 //--------------------
 
-// Test the isNil() helper.
+// TestIsNilHelper test sthe isNil() helper.
 func TestIsNilHelper(t *testing.T) {
 	if !isNil(nil) {
 		t.Errorf("nil is not nil?")
@@ -76,7 +76,7 @@ func TestIsNilHelper(t *testing.T) {
 	}
 }
 
-// Test the True() assertion.
+// TestAssertTrue tests the True() assertion.
 func TestAssertTrue(t *testing.T) {
 	a := createValueAsserts(t)
 
@@ -86,7 +86,7 @@ func TestAssertTrue(t *testing.T) {
 	}
 }
 
-// Test the False() assertion.
+// TestAssertFalse tests the False() assertion.
 func TestAssertFalse(t *testing.T) {
 	a := createValueAsserts(t)
 
@@ -96,17 +96,16 @@ func TestAssertFalse(t *testing.T) {
 	}
 }
 
-// Test the Nil() assertion.
+// TestAssertNil tests the Nil() assertion.
 func TestAssertNil(t *testing.T) {
 	a := createValueAsserts(t)
-
 	a.Nil(nil, "should not fail")
 	if a.Nil("not nil", "should fail and be logged") {
 		t.Errorf("Nil() returned true")
 	}
 }
 
-// Test the NotNil() assertion.
+// TestAssertNotNil tests the NotNil() assertion.
 func TestAssertNotNil(t *testing.T) {
 	a := createValueAsserts(t)
 
@@ -116,7 +115,7 @@ func TestAssertNotNil(t *testing.T) {
 	}
 }
 
-// Test the Equal() assertion.
+// TestAssertEqual tests the Equal() assertion.
 func TestAssertEqual(t *testing.T) {
 	a := createValueAsserts(t)
 	m := map[string]int{"one": 1, "two": 2, "three": 3}
@@ -134,7 +133,7 @@ func TestAssertEqual(t *testing.T) {
 	}
 }
 
-// Test the Different() assertion.
+// TestAssertDifferent tests the Different() assertion.
 func TestAssertDifferent(t *testing.T) {
 	a := createValueAsserts(t)
 	m := map[string]int{"one": 1, "two": 2, "three": 3}
@@ -152,35 +151,35 @@ func TestAssertDifferent(t *testing.T) {
 	}
 }
 
-// Test the Matches() assertion.
-func TestAssertMatches(t *testing.T) {
+// TestAssertMatch tests the Match() assertion.
+func TestAssertMatch(t *testing.T) {
 	a := createValueAsserts(t)
 
-	a.Matches("this is a test", "this.*test", "should not fail")
-	a.Matches("this is 1 test", "this is [0-9] test", "should not fail")
-	if a.Matches("this is a test", "foo", "should fail and be logged") {
-		t.Errorf("Matches() returned true")
+	a.Match("this is a test", "this.*test", "should not fail")
+	a.Match("this is 1 test", "this is [0-9] test", "should not fail")
+	if a.Match("this is a test", "foo", "should fail and be logged") {
+		t.Errorf("Match() returned true")
 	}
-	if a.Matches("this is a test", "this*test", "should fail and be logged") {
-		t.Errorf("Matches() returned true")
+	if a.Match("this is a test", "this*test", "should fail and be logged") {
+		t.Errorf("Match() returned true")
 	}
 }
 
-// Test the ErrorMatches() assertion.
-func TestAssertErrorMatches(t *testing.T) {
+// TestAssertErrorMatch tests the ErrorMatch() assertion.
+func TestAssertErrorMatch(t *testing.T) {
 	a := createValueAsserts(t)
 	err := errors.New("oops, an error")
 
-	a.ErrorMatches(err, "oops, an error", "should not fail")
-	a.ErrorMatches(err, "oops,.*", "should not fail")
-	if a.ErrorMatches(err, "foo", "should fail and be logged") {
-		t.Errorf("ErrorMatches() returned true")
+	a.ErrorMatch(err, "oops, an error", "should not fail")
+	a.ErrorMatch(err, "oops,.*", "should not fail")
+	if a.ErrorMatch(err, "foo", "should fail and be logged") {
+		t.Errorf("ErrorMatch() returned true")
 	}
 }
 
-// Test the Implements() assertion.
+// TestAssertImplements tests the Implements() assertion.
 func TestAssertImplements(t *testing.T) {
-	a := createTypeAssert(t)
+	a := createTypeAsserts(t)
 
 	var err error
 	var w io.Writer
@@ -194,9 +193,9 @@ func TestAssertImplements(t *testing.T) {
 	}
 }
 
-// Test the Assignable() assertion.
+// TestAssertAssignable tests the Assignable() assertion.
 func TestAssertAssignable(t *testing.T) {
-	a := createTypeAssert(t)
+	a := createTypeAsserts(t)
 
 	a.Assignable(1, 5, "should not fail")
 	if a.Assignable("one", 5, "should fail and be logged") {
@@ -204,9 +203,9 @@ func TestAssertAssignable(t *testing.T) {
 	}
 }
 
-// Test the Unassignable() assertion.
+// TestAssertUnassignable tests the Unassignable() assertion.
 func TestAssertUnassignable(t *testing.T) {
-	a := createTypeAssert(t)
+	a := createTypeAsserts(t)
 
 	a.Unassignable("one", 5, "should not fail")
 	if a.Unassignable(1, 5, "should fail and be logged") {
@@ -214,7 +213,58 @@ func TestAssertUnassignable(t *testing.T) {
 	}
 }
 
-// Test if the panic assert panics when failing.
+// TestAssertEmpty tests the Empty() assertion.
+func TestAssertEmpty(t *testing.T) {
+	a := createValueAsserts(t)
+
+	a.Empty("", "should not fail")
+	a.Empty([]bool{}, "should also not fail")
+	if a.Empty("not empty", "should fail and be logged") {
+		t.Errorf("Empty() returned true")
+	}
+	if a.Empty([3]int{1, 2, 3}, "should also fail and be logged") {
+		t.Errorf("Empty() returned true")
+	}
+	if a.Empty(true, "illegal type has to fail") {
+		t.Errorf("Empty() returned true")
+	}
+}
+
+// TestAssertNotEmpty tests the NotEmpty() assertion.
+func TestAsserNotEmpty(t *testing.T) {
+	a := createValueAsserts(t)
+
+	a.NotEmpty("not empty", "should not fail")
+	a.NotEmpty([3]int{1, 2, 3}, "should also not fail")
+	if a.NotEmpty("", "should fail and be logged") {
+		t.Errorf("NotEmpty() returned true")
+	}
+	if a.NotEmpty([]int{}, "should also fail and be logged") {
+		t.Errorf("NotEmpty() returned true")
+	}
+	if a.NotEmpty(true, "illegal type has to fail") {
+		t.Errorf("NotEmpty() returned true")
+	}
+}
+
+// TestAssertLength tests the Length() assertion.
+func TestAssertLength(t *testing.T) {
+	a := createValueAsserts(t)
+
+	a.Length("", 0, "should not fail")
+	a.Length([]bool{true, false}, 2, "should also not fail")
+	if a.Length("not empty", 0, "should fail and be logged") {
+		t.Errorf("Length() returned true")
+	}
+	if a.Length([3]int{1, 2, 3}, 10, "should also fail and be logged") {
+		t.Errorf("Length() returned true")
+	}
+	if a.Length(true, 1, "illegal type has to fail") {
+		t.Errorf("Length() returned true")
+	}
+}
+
+// TestPanicAssert tests if the panic assert panics when failing.
 func TestPanicAssert(t *testing.T) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -231,7 +281,7 @@ func TestPanicAssert(t *testing.T) {
 	t.Errorf("should not be reached")
 }
 
-// Test the testing assert.
+// TestTestingAssert tests the testing assert.
 func TestTestingAssert(t *testing.T) {
 	a := NewTestingAsserts(t, false)
 	foo := func() {}

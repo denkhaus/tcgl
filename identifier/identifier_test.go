@@ -12,6 +12,7 @@ package identifier
 //--------------------
 
 import (
+	"code.google.com/p/tcgl/asserts"
 	"testing"
 )
 
@@ -21,64 +22,56 @@ import (
 
 // Test the UUID.
 func TestUuid(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
+	// Asserts.
+	uuid := NewUUID()
+	uuidStr := uuid.String()
+	assert.Equal(len(uuid), 16, "UUID length has to be 16.")
+	assert.Match(uuidStr, "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", "UUID has to match.")
 	uuids := make(map[string]bool)
-
-	t.Logf("Start generating UUIDs ...")
-
 	for i := 0; i < 1000000; i++ {
-		uuid := NewUUID().String()
-
-		if uuids[uuid] {
-			t.Fatalf("UUID collision")
-		}
-
-		uuids[uuid] = true
+		uuid = NewUUID()
+		uuidStr = uuid.String()
+		assert.False(uuids[uuidStr], "UUID collision should not happen.")
+		uuids[uuidStr] = true
 	}
-
-	t.Logf("Done generating UUIDs!")
 }
 
-// Test the creation of an identifier.
-func TestIdentifier(t *testing.T) {
+// Test the creation of identifiers based on types.
+func TestTypeAsIdentifierPart(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
+
 	// Type as identifier.
 	var tai TypeToSplitForIdentifier
 
-	idp := TypeAsIdentifierPart(tai)
+	id := TypeAsIdentifierPart(tai)
+	assert.Equal(id, "type-to-split-for-identifier", "Wrong TypeAsIdentifierPart() result!")
 
-	if idp != "type-to-split-for-identifier" {
-		t.Errorf("Identifier part for TypeTpSplitForIdentifier is wrong, returned '%v'!", idp)
-	}
+	id = TypeAsIdentifierPart(NewUUID())
+	assert.Equal(id, "u-u-i-d", "Wrong TypeAsIdentifierPart() result!")
+}
 
-	idp = TypeAsIdentifierPart(NewUUID())
-
-	if idp != "u-u-i-d" {
-		t.Errorf("Identifier part for UUID is wrong, returned '%v'!", idp)
-	}
+// Test the creation of identifiers based on parts.
+func TestIdentifier(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
 
 	// Identifier.
 	id := Identifier("One", 2, "three four")
-
-	if id != "one:2:three-four" {
-		t.Errorf("First identifier is wrong! Id: %v", id)
-	}
+	assert.Equal(id, "one:2:three-four", "Wrong Identifier() result!")
 
 	id = Identifier(2011, 6, 22, "One, two, or  three things.")
+	assert.Equal(id, "2011:6:22:one-two-or-three-things", "Wrong Identifier() result!")
+}
 
-	if id != "2011:6:22:one-two-or-three-things" {
-		t.Errorf("Second identifier is wrong! Id: %v", id)
-	}
+// Test the creation of identifiers based on parts with defined seperators.
+func TestSepIdentifier(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
 
-	id = SepIdentifier("+", 1, "oNe", 2, "TWO", "3", "ÄÖÜ")
-
-	if id != "1+one+2+two+3+äöü" {
-		t.Errorf("Third identifier is wrong! Id: %v", id)
-	}
+	id := SepIdentifier("+", 1, "oNe", 2, "TWO", "3", "ÄÖÜ")
+	assert.Equal(id, "1+one+2+two+3+äöü", "Wrong SepIdentifier() result!")
 
 	id = LimitedSepIdentifier("+", true, "     ", 1, "oNe", 2, "TWO", "3", "ÄÖÜ", "Four", "+#-:,")
-
-	if id != "1+one+2+two+3+four" {
-		t.Errorf("Fourth identifier is wrong! Id: %v", id)
-	}
+	assert.Equal(id, "1+one+2+two+3+four", "Wrong LimitedSepIdentifier() result!")
 }
 
 //--------------------

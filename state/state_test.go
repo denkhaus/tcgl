@@ -12,6 +12,7 @@ package state
 //--------------------
 
 import (
+	"code.google.com/p/tcgl/asserts"
 	"log"
 	"testing"
 	"time"
@@ -23,63 +24,63 @@ import (
 
 // Test the finite state machine successfully.
 func TestFsmSuccess(t *testing.T) {
-	fsm := New(NewLoginHandler(), -1)
+	assert := asserts.NewTestingAsserts(t, true)
+	// Create some test data.
+	fsm := New(NewLoginHandler(), 5 * time.Minute)
+	fsm.Handle("login", &LoginData{"yadda", "yadda"})
+	fsm.Handle("prepare", &LoginData{"foo", "bar"})
+	fsm.Handle("login", &LoginData{"foo", "yadda"})
+	fsm.Handle("login", &LoginData{"foo", "yadda"})
+	fsm.Handle("login", &LoginData{"foo", "yadda"})
+	fsm.Handle("login", &LoginData{"foo", "yadda"})
 
-	fsm.Send(&LoginPayload{"yadda"})
-	fsm.Send(&PreparePayload{"foo", "bar"})
-	fsm.Send(&LoginPayload{"yaddaA"})
-	fsm.Send(&LoginPayload{"yaddaB"})
-	fsm.Send(&LoginPayload{"yaddaC"})
-	fsm.Send(&LoginPayload{"yaddaD"})
-	fsm.Send(&UnlockPayload{})
-	fsm.Send(&LoginPayload{"bar"})
+	assert.Equal(fsm.State(), "locked", "FSM is locked.")
 
-	time.Sleep(1e7)
+	fsm.Handle("unlock", &LoginData{"foo", ""})
+	fsm.Handle("login", &LoginData{"foo", "bar"})
 
-	t.Logf("Status: '%v'.", fsm.State())
+	assert.Equal(fsm.State(), "terminated", "FSM terminated.")
 }
 
 // Test the finite state machine with timeout.
 func TestFsmTimeout(t *testing.T) {
-	fsm := New(NewLoginHandler(), 1e5)
+	assert := asserts.NewTestingAsserts(t, true)
+	// Create some test data.
+	fsm := New(NewLoginHandler(), 250 * time.Millisecond)
+	fsm.Handle("prepare", &LoginData{"foo", "bar"})
+	fsm.Handle("login", &LoginData{"foo", "yadda"})
+	fsm.Handle("login", &LoginData{"foo", "yadda"})
 
-	fsm.Send(&LoginPayload{"yadda"})
-	fsm.Send(&PreparePayload{"foo", "bar"})
-	fsm.Send(&LoginPayload{"yaddaA"})
-	fsm.Send(&LoginPayload{"yaddaB"})
+	time.Sleep(2e9)
+	assert.Equal(fsm.State(), "new", "FSM is timed-out.")
 
-	time.Sleep(1e8)
+	fsm.Handle("prepare", &LoginData{"foo", "bar"})
+	fsm.Handle("login", &LoginData{"foo", "bar"})
 
-	fsm.Send(&LoginPayload{"yaddaC"})
-	fsm.Send(&LoginPayload{"yaddaD"})
-	fsm.Send(&UnlockPayload{})
-	fsm.Send(&LoginPayload{"bar"})
+	assert.Equal(fsm.State(), "terminated", "FSM terminated.")
+}
 
-	time.Sleep(1e7)
+// Test the finite state machine having an error.
+func TestFsmError(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
+	// Create some test data.
+	fsm := New(NewLoginHandler(), 250 * time.Millisecond)
+	fsm.Handle("prepare", &LoginData{"foo", "bar"})
+	fsm.Handle("bullshit", &LoginData{"", ""})
+	fsm.Handle("login", &LoginData{"foo", "yadda"})
 
-	t.Logf("Status: '%v'.", fsm.State())
+	assert.Equal(fsm.State(), "terminated", "FSM terminated after error.")
 }
 
 //--------------------
 // HELPER: TEST LOGIN EVENT HANDLER
 //--------------------
 
-// Prepare payload.
-type PreparePayload struct {
-	userId   string
-	password string
+// LoginData encapsulates the data for the login handler.
+type LoginData struct {
+	UserId   string
+	Password string
 }
-
-// Login payload.
-type LoginPayload struct {
-	password string
-}
-
-// Reset payload.
-type ResetPayload struct{}
-
-// Unlock payload.
-type UnlockPayload struct{}
 
 // Login handler tyoe.
 type LoginHandler struct {
@@ -87,113 +88,127 @@ type LoginHandler struct {
 	password            string
 	illegalLoginCounter int
 	locked              bool
+	ticks               int
 }
 
 // Create a new login handler.
 func NewLoginHandler() *LoginHandler {
-	return new(LoginHandler)
+	return &LoginHandler{}
 }
 
 // Return the initial state.
-func (lh *LoginHandler) Init() string {
-	return "New"
+func (lh *LoginHandler) Init() (*HandlerMap, string) {
+	hm := NewHandlerMap(lh)
+	hm.Assign("new", "HandleNew")
+	hm.Assign("authenticating", "HandleAuthenticating")
+	hm.Assign("locked", "HandleLocked")
+	return hm, "new"
 }
 
-// Terminate the handler.
-func (lh *LoginHandler) Terminate(string, interface{}) string {
-	return "LoggedIn"
+func (lh *LoginHandler) Error(t *Transition, err error) string {
+	log.Printf("Handle error: %v", err)
+	lh.init()
+	return "terminate"
 }
 
-// Handler for state: "New".
-func (lh *LoginHandler) HandleStateNew(c *Condition) (string, interface{}) {
-	switch pld := c.Payload.(type) {
-	case *PreparePayload:
-		lh.userId = pld.userId
-		lh.password = pld.password
+func (lh *LoginHandler) Terminate() {
+	log.Printf("Terminating.")
+}
+
+// Handler for state: "new".
+func (lh *LoginHandler) HandleNew(t *Transition) string {
+	ld, _ := t.Payload.(*LoginData)
+	switch t.Command {
+	case "prepare":
+		lh.userId = ld.UserId
+		lh.password = ld.Password
 		lh.illegalLoginCounter = 0
 		lh.locked = false
-
 		log.Printf("User '%v' prepared.", lh.userId)
-
-		return "Authenticating", nil
-	case *LoginPayload:
+		return "authenticating"
+	case "login":
 		log.Printf("Illegal login, handler not initialized!")
-
-		return "New", false
-	case Timeout:
-		log.Printf("Timeout, terminate handler!")
-
-		return "Terminate", nil
+		return "new"
+	case "tick":
+		log.Printf("Got a new tick.")
+		return "new"
 	}
-
-	log.Printf("Illegal payload '%v' during state 'new'!", c.Payload)
-
-	return "New", nil
+	log.Printf("Illegal command %q during state 'new'!", t.Command)
+	return "new"
 }
 
-// Handler for state: "Authenticating".
-func (lh *LoginHandler) HandleStateAuthenticating(c *Condition) (string, interface{}) {
-	switch pld := c.Payload.(type) {
-	case *LoginPayload:
-		if pld.password == lh.password {
+// Handler for state: "authenticating".
+func (lh *LoginHandler) HandleAuthenticating(t *Transition) string {
+	ld, _ := t.Payload.(*LoginData)
+	switch t.Command {
+	case "login":
+		if ld.Password == lh.password {
 			lh.illegalLoginCounter = 0
 			lh.locked = false
-
+			lh.ticks = 0
 			log.Printf("User '%v' logged in.", lh.userId)
-
-			return "Terminate", true
+			return "terminate"
 		}
-
 		log.Printf("User '%v' used illegal password.", lh.userId)
-
 		lh.illegalLoginCounter++
-
 		if lh.illegalLoginCounter == 3 {
 			lh.locked = true
-
 			log.Printf("User '%v' locked!", lh.userId)
-
-			return "Locked", false
+			return "locked"
 		}
-
-		return "Authenticating", false
-	case *UnlockPayload:
+		return "authenticating"
+	case "unlock":
 		log.Printf("No need to unlock user '%v'!", lh.userId)
-
-		return "Authenticating", nil
-	case *ResetPayload, Timeout:
+		return "authenticating"
+	case "reset":
 		lh.illegalLoginCounter = 0
 		lh.locked = false
-
+		lh.ticks = 0
 		log.Printf("User '%v' resetted.", lh.userId)
-
-		return "Authenticating", nil
+		return "authenticating"
+	case "bullshit":
+		log.Printf("Got bullshit commmand.")
+		return "i-dont-know-what-to-do"
+	case "tick":
+		log.Printf("Got a tick.")
+		lh.ticks++
+		if lh.ticks > 5 {
+			lh.init()
+			return "new"
+		}
+		return "authenticating"
 	}
-
-	log.Printf("Illegal payload '%v' during state 'authenticating'!", c.Payload)
-
-	return "Authenticating", nil
+	log.Printf("Illegal command %q during state 'authenticating'!", t.Command)
+	return "authenticating"
 }
 
 // Handler for state: "Locked".
-func (lh *LoginHandler) HandleStateLocked(c *Condition) (string, interface{}) {
-	switch c.Payload.(type) {
-	case *LoginPayload:
-		log.Printf("User '%v' login rejected, user is locked!", lh.userId)
-
-		return "Locked", false
-	case *ResetPayload, *UnlockPayload, Timeout:
+func (lh *LoginHandler) HandleLocked(t *Transition) string {
+	ld, _ := t.Payload.(*LoginData)
+	switch t.Command {
+	case "login":
+		log.Printf("User %q login rejected, user is locked!", ld.UserId)
+		return "locked"
+	case "reset", "unlock":
 		lh.illegalLoginCounter = 0
 		lh.locked = false
-
-		log.Printf("User '%v' resetted / unlocked.", lh.userId)
-
-		return "Authenticating", nil
+		lh.ticks = 0
+		log.Printf("User %q resetted / unlocked.", ld.UserId)
+		return "authenticating"
+	case "tick":
+		log.Printf("Got a locked tick.")
+		return "locked"
 	}
+	log.Printf("Illegal command %q during state 'loacked'!", t.Command)
+	return "locked"
+}
 
-	log.Printf("Illegal payload '%v' during state 'loacked'!", c.Payload)
-
-	return "Locked", nil
+func (lh *LoginHandler) init() {
+	lh.userId              = ""
+	lh.password            = ""
+	lh.illegalLoginCounter = 0
+	lh.locked              = false
+	lh.ticks               = 0
 }
 
 // EOF

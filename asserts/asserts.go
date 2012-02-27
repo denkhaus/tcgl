@@ -26,7 +26,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Asserts - Release 2012-02-08"
+const RELEASE = "Tideland Common Go Library - Asserts - Release 2012-02-27"
 
 //--------------------
 // TEST
@@ -43,11 +43,15 @@ const (
 	NotNil
 	Equal
 	Different
-	Matches
-	ErrorMatches
+	About
+	Match
+	ErrorMatch
 	Implements
 	Assignable
 	Unassignable
+	Empty
+	NotEmpty
+	Length
 )
 
 var testNames = []string{
@@ -58,11 +62,15 @@ var testNames = []string{
 	NotNil:       "not nil",
 	Equal:        "equal",
 	Different:    "different",
-	Matches:      "matches",
-	ErrorMatches: "error matches",
+	About:	      "about",
+	Match:        "match",
+	ErrorMatch:   "error match",
 	Implements:   "implements",
 	Assignable:   "assignable",
 	Unassignable: "unassignable",
+	Empty:        "empty",
+	NotEmpty:     "not empty",
+	Length:       "length",
 }
 
 func (t Test) String() string {
@@ -84,7 +92,7 @@ type FailFunc func(test Test, obtained, expected interface{}, msg string) bool
 func panicFailFunc(test Test, obtained, expected interface{}, msg string) bool {
 	var obex string
 	switch test {
-	case True, False, Nil, NotNil:
+	case True, False, Nil, NotNil, Empty, NotEmpty:
 		obex = fmt.Sprintf("'%v'", obtained)
 	case Implements, Assignable, Unassignable:
 		obex = fmt.Sprintf("'%v' <> '%v'", ValueDescription(obtained), ValueDescription(expected))
@@ -110,7 +118,7 @@ func generateTestingFailFunc(t *testing.T, fail bool) FailFunc {
 		fmt.Fprintf(buffer, "Function: %s()\n", funcName)
 		fmt.Fprintf(buffer, "Line    : %d\n", line)
 		switch test {
-		case True, False, Nil, NotNil:
+		case True, False, Nil, NotNil, Empty, NotEmpty:
 			fmt.Fprintf(buffer, "Obtained: %v\n", obtained)
 		case Implements, Assignable, Unassignable:
 			fmt.Fprintf(buffer, "Obtained: %v\n", ValueDescription(obtained))
@@ -185,7 +193,7 @@ func (a Asserts) NotNil(obtained interface{}, msg string) bool {
 	return true
 }
 
-// Equal tests if expected and obtained are equal.
+// Equal tests if obtained and expected are equal.
 func (a Asserts) Equal(obtained, expected interface{}, msg string) bool {
 	if !reflect.DeepEqual(obtained, expected) {
 		return a.failFunc(Equal, obtained, expected, msg)
@@ -193,7 +201,7 @@ func (a Asserts) Equal(obtained, expected interface{}, msg string) bool {
 	return true
 }
 
-// Different tests if expected and obtained are different.
+// Different tests if obtained and expected are different.
 func (a Asserts) Different(obtained, expected interface{}, msg string) bool {
 	if reflect.DeepEqual(obtained, expected) {
 		return a.failFunc(Different, obtained, expected, msg)
@@ -201,26 +209,40 @@ func (a Asserts) Different(obtained, expected interface{}, msg string) bool {
 	return true
 }
 
-// Matches tests if the obtained string matches a regular expression.
-func (a Asserts) Matches(obtained, regex, msg string) bool {
-	matches, err := regexp.MatchString("^"+regex+"$", obtained)
-	if err != nil {
-		return a.failFunc(Matches, obtained, regex, "can't compile regex: "+err.Error())
+// About tests if obtained and expected are near to each other (within the 
+// given extend).
+func (a Asserts) About(obtained, expected, extend float64, msg string) bool {
+	if extend < 0.0 {
+		extend = extend * (-1)
 	}
-	if !matches {
-		return a.failFunc(Matches, obtained, regex, msg)
+	expectedMin := expected - extend
+	expectedMax := expected + extend
+	if obtained < expectedMin || obtained > expectedMax {
+		return a.failFunc(About, obtained, expected, msg)
 	}
 	return true
 }
 
-// ErrorMatches tests if the obtained error as string matches a regular expression.
-func (a Asserts) ErrorMatches(obtained error, regex, msg string) bool {
-	matches, err := regexp.MatchString("^"+regex+"$", obtained.Error())
+// Match tests if the obtained string matches a regular expression.
+func (a Asserts) Match(obtained, regex, msg string) bool {
+	matches, err := regexp.MatchString("^"+regex+"$", obtained)
 	if err != nil {
-		return a.failFunc(ErrorMatches, obtained, regex, "can't compile regex: "+err.Error())
+		return a.failFunc(Match, obtained, regex, "can't compile regex: "+err.Error())
 	}
 	if !matches {
-		return a.failFunc(ErrorMatches, obtained, regex, msg)
+		return a.failFunc(Match, obtained, regex, msg)
+	}
+	return true
+}
+
+// ErrorMatch tests if the obtained error as string matches a regular expression.
+func (a Asserts) ErrorMatch(obtained error, regex, msg string) bool {
+	matches, err := regexp.MatchString("^"+regex+"$", obtained.Error())
+	if err != nil {
+		return a.failFunc(ErrorMatch, obtained, regex, "can't compile regex: "+err.Error())
+	}
+	if !matches {
+		return a.failFunc(ErrorMatch, obtained, regex, msg)
 	}
 	return true
 }
@@ -261,6 +283,84 @@ func (a Asserts) Unassignable(obtained, expected interface{}, msg string) bool {
 	return true
 }
 
+// Empty tests if the len of the obtained string, array, slice
+// map or channel is 0.
+func (a Asserts) Empty(obtained interface{}, msg string) bool {
+	// Check using the interface.
+	if l, ok := obtained.(lenable); ok {
+		if l.Len() != 0 {
+			return a.failFunc(Empty, l.Len(), 0, msg)
+		}
+		return true
+	}
+	// Check the standard types.
+	obtainedValue := reflect.ValueOf(obtained)
+	obtainedKind := obtainedValue.Kind()
+	switch obtainedKind {
+	case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice, reflect.String:
+		obtainedLen := obtainedValue.Len()
+		if obtainedLen != 0 {
+			return a.failFunc(Empty, obtainedLen, 0, msg)
+		}
+	default:
+		return a.failFunc(Empty, ValueDescription(obtained), 0, 
+			"obtained type is no array, chan, map, slice, string or has method Len()")
+	}
+	return true
+}
+
+// NotEmpty tests if the len of the obtained string, array, slice
+// map or channel is greater than 0.
+func (a Asserts) NotEmpty(obtained interface{}, msg string) bool {
+	// Check using the interface.
+	if l, ok := obtained.(lenable); ok {
+		if l.Len() == 0 {
+			return a.failFunc(Empty, l.Len(), 0, msg)
+		}
+		return true
+	}
+	// Check the standard types.
+	obtainedValue := reflect.ValueOf(obtained)
+	obtainedKind := obtainedValue.Kind()
+	switch obtainedKind {
+	case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice, reflect.String:
+		obtainedLen := obtainedValue.Len()
+		if obtainedLen == 0 {
+			return a.failFunc(NotEmpty, obtainedLen, nil, msg)
+		}
+	default:
+		return a.failFunc(NotEmpty, ValueDescription(obtained), nil, 
+			"obtained type is no array, chan, map, slice, string or has method Len()")
+	}
+	return true
+}
+
+// Length tests if the len of the obtained string, array, slice
+// map or channel is equal to the expected one.
+func (a Asserts) Length(obtained interface{}, expected int, msg string) bool {
+	// Check using the interface.
+	if l, ok := obtained.(lenable); ok {
+		if l.Len() != expected {
+			return a.failFunc(Length, l.Len(), expected, msg)
+		}
+		return true
+	}
+	// Check the standard types.
+	obtainedValue := reflect.ValueOf(obtained)
+	obtainedKind := obtainedValue.Kind()
+	switch obtainedKind {
+	case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice, reflect.String:
+		obtainedLen := obtainedValue.Len()
+		if obtainedLen != expected {
+			return a.failFunc(Empty, obtainedLen, expected, msg)
+		}
+	default:
+		return a.failFunc(Empty, ValueDescription(obtained), 0, 
+			"obtained type is no array, chan, map, slice, string or has method Len()")
+	}
+	return true
+}
+
 //--------------------
 // HELPER
 //--------------------
@@ -281,6 +381,11 @@ func ValueDescription(value interface{}) string {
 	}
 	// Default.
 	return kind.String()
+}
+
+// lenable is an interface for the Len() mehod.
+type lenable interface {
+	Len() int
 }
 
 // isNil is a safer way to test if a value is nil.

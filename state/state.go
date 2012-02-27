@@ -12,6 +12,7 @@ package state
 //--------------------
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"time"
@@ -21,182 +22,158 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Finite State Machine - Release 2012-01-23"
-
-//--------------------
-// HELPER TYPES
-//--------------------
-
-// Condition type.
-type Condition struct {
-	Now     time.Time
-	Payload interface{}
-}
-
-// Transition type.
-type transition struct {
-	payload    interface{}
-	resultChan chan interface{}
-}
-
-// Timeout type.
-type Timeout time.Time
+const RELEASE = "Tideland Common Go Library - Finite State Machine - Release 2012-02-24"
 
 //--------------------
 // FINITE STATE MACHINE
 //--------------------
 
+// Transition type.
+type Transition struct {
+	Timestamp  time.Time
+	Command    string
+	State      string
+	Payload    interface{}
+	ResultChan chan interface{}
+}
+
+// HandlerMap maps states to handler methods.
+type HandlerMap struct {
+	handler reflect.Value
+	methods map[string]reflect.Value
+}
+
+// NewHandlerMap creates a new handler map with initial state
+// to method assignments.
+func NewHandlerMap(h Handler) *HandlerMap {
+	hm := &HandlerMap{
+		handler: reflect.ValueOf(h),
+		methods: make(map[string]reflect.Value),
+	}
+	return hm
+}
+
+// Assign adds an assignment of a state to a handler method.
+func (hm *HandlerMap) Assign(state, method string) error {
+	mv := hm.handler.MethodByName(method)
+	mvt := mv.Type()
+	// Check the method.
+	if mvt.NumIn() != 2 && mvt.NumOut() != 1 {
+		return fmt.Errorf("%q is no valid handler method", method)
+	}
+	// Assign the method.
+	hm.methods[strings.ToLower(state)] = mv
+	return nil
+}
+
+// call does the call of a handler method for a state.
+func (hm *HandlerMap) call(state string, t *Transition) (next string, err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			next = ""
+			err = fmt.Errorf("state runtime error: %v", e)
+		}
+	}()
+	if method, ok := hm.methods[state]; ok {
+		args := []reflect.Value{reflect.ValueOf(t)}
+		results := method.Call(args)
+		return strings.ToLower(results[0].Interface().(string)), nil
+	}
+	// Illegal state.
+	return "", fmt.Errorf("tried to handle illegal state %q", state)
+}
+
 // Handler interface.
 type Handler interface {
-	Init() string
-	Terminate(string, interface{}) string
+	Init() (*HandlerMap, string)
+	Error(*Transition, error) string
+	Terminate()
 }
 
 // State machine type.
 type FSM struct {
-	Handler        Handler
-	handlerValue   reflect.Value
-	handlerFuncs   map[string]reflect.Value
+	handler        Handler
+	handlerMap     *HandlerMap
 	state          string
-	transitionChan chan *transition
-	timeoutChan    <-chan time.Time
+	transitionChan chan *Transition
+	tickChan       <-chan time.Time
+	stateChan      chan chan string
 }
 
 // Create a new finite state machine.
-func New(h Handler, timeout time.Duration) *FSM {
-	var bufferSize int
-
-	if timeout > 0 {
-		bufferSize = int(timeout / 1e3)
-	} else {
-		bufferSize = 10
-	}
-
+func New(h Handler, tick time.Duration) *FSM {
+	hm, s := h.Init()
 	fsm := &FSM{
-		Handler:        h,
-		handlerFuncs:   make(map[string]reflect.Value),
-		state:          h.Init(),
-		transitionChan: make(chan *transition, bufferSize),
+		handler:        h,
+		handlerMap:     hm,
+		state:          s,
+		transitionChan: make(chan *Transition),
+		tickChan:       time.Tick(tick),
+		stateChan:      make(chan chan string),
 	}
-
-	if timeout > 0 {
-		fsm.timeoutChan = time.After(timeout)
-	}
-
-	fsm.analyze()
-
+	// Start working.
 	go fsm.backend()
-
 	return fsm
 }
 
-// Send a payload to handle and return the result.
-func (fsm *FSM) SendWithResult(payload interface{}) interface{} {
-	t := &transition{payload, make(chan interface{})}
-
+// HandleWithResult lets the FSM handle a command and payload and 
+// returns a channel for a possible result.
+func (fsm *FSM) HandleWithResult(cmd string, payload interface{}) chan interface{} {
+	t := &Transition{time.Now(), cmd, "", payload, make(chan interface{})}
 	fsm.transitionChan <- t
-
-	return <-t.resultChan
+	return t.ResultChan
 }
 
-// Send a payload with no result.
-func (fsm *FSM) Send(payload interface{}) {
-	t := &transition{payload, nil}
-
+// Handle lets the FSM handle a command and payload.
+func (fsm *FSM) Handle(cmd string, payload interface{}) {
+	t := &Transition{time.Now(), cmd, "", payload, nil}
 	fsm.transitionChan <- t
 }
 
-// Send a payload with no result after a given time.
-func (fsm *FSM) SendAfter(payload interface{}, after time.Duration) {
-	saf := func() {
-		time.Sleep(after)
-		fsm.Send(payload)
-	}
-	go saf()
+// HandeAfter lets the FSM handle a command and payload after a given duration.
+func (fsm *FSM) HandleAfter(cmd string, payload interface{}, after time.Duration) {
+        haf := func() {
+                time.Sleep(after)
+                fsm.Handle(cmd, payload)
+        }
+        go haf()
 }
 
-// Return the current state.
+// State returns the current state.
 func (fsm *FSM) State() string {
-	return fsm.state
+	stateChan := make(chan string)
+	fsm.stateChan <- stateChan
+	return <-stateChan
 }
 
-// Analyze the event handler and prepare the state table.
-func (fsm *FSM) analyze() {
-	prefix := "HandleState"
-
-	fsm.handlerValue = reflect.ValueOf(fsm.Handler)
-
-	num := fsm.handlerValue.Type().NumMethod()
-
-	for i := 0; i < num; i++ {
-		meth := fsm.handlerValue.Type().Method(i)
-
-		if (meth.PkgPath == "") && (strings.HasPrefix(meth.Name, prefix)) {
-			if (meth.Type.NumIn() == 2) && (meth.Type.NumOut() == 2) {
-				state := meth.Name[len(prefix):len(meth.Name)]
-
-				fsm.handlerFuncs[state] = meth.Func
-			}
+// backend is the state machines backend.
+func (fsm *FSM) backend() {
+	// Handle one transition.
+	handle := func(t *Transition) {
+		var err error
+		fsm.state, err = fsm.handlerMap.call(fsm.state, t)
+		if err != nil {
+			fsm.state = fsm.handler.Error(t, err)
+		}
+		if fsm.state == "terminate" {
+			fsm.handler.Terminate()
+			fsm.state = "terminated"
 		}
 	}
-}
-
-// State machine backend.
-func (fsm *FSM) backend() {
 	// Message loop.
 	for {
 		select {
 		case t := <-fsm.transitionChan:
 			// Regular transition.
-
-			if nextState, ok := fsm.handle(t); ok {
-				// Continue.
-
-				fsm.state = nextState
-			} else {
-				// Stop processing.
-
-				fsm.state = fsm.Handler.Terminate(fsm.state, nextState)
-
-				return
-			}
-		case to := <-fsm.timeoutChan:
-			// Timeout signal resent to let it be handled.
-
-			t := &transition{Timeout(to), nil}
-
-			fsm.transitionChan <- t
+			handle(t)
+		case <-fsm.tickChan:
+			// Received a tick.
+			handle(&Transition{time.Now(), "tick", fsm.state, nil, nil})
+		case stateChan := <-fsm.stateChan:
+			// Send the current state.
+			stateChan <- fsm.state
 		}
 	}
-}
-
-// Handle a transition.
-func (fsm *FSM) handle(t *transition) (string, bool) {
-	condition := &Condition{time.Now(), t.payload}
-	handlerFunc := fsm.handlerFuncs[fsm.state]
-	handlerArgs := make([]reflect.Value, 2)
-
-	handlerArgs[0] = fsm.handlerValue
-	handlerArgs[1] = reflect.ValueOf(condition)
-
-	results := handlerFunc.Call(handlerArgs)
-
-	nextState := results[0].Interface().(string)
-	result := results[1].Interface()
-
-	// Return a result if wanted.
-
-	if t.resultChan != nil {
-		t.resultChan <- result
-	}
-
-	// Check for termination.
-
-	if nextState == "Terminate" {
-		return nextState, false
-	}
-
-	return nextState, true
 }
 
 // EOF

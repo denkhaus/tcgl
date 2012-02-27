@@ -20,7 +20,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Cache - Release 2012-01-23"
+const RELEASE = "Tideland Common Go Library - Cache - Release 2012-02-15"
 
 //--------------------
 // CONST

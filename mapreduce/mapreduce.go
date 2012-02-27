@@ -20,7 +20,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Map/Reduce - Release 2012-01-24"
+const RELEASE = "Tideland Common Go Library - Map/Reduce - Release 2012-02-14"
 
 //--------------------
 // KEY/VALUE TYPES

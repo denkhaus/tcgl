@@ -22,7 +22,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Monitoring - Release 2012-01-29"
+const RELEASE = "Tideland Common Go Library - Monitoring - Release 2012-02-16"
 
 //--------------------
 // CONSTANTS
@@ -34,10 +34,12 @@ const (
 	etmFormat = "| %-40s | %9d | %9.3f | %9.3f | %9.3f | %13.3f | %9d |\n"
 	etmFooter = "| All times in milliseconds.                                                                                           |\n"
 	etmELine  = "+----------------------------------------------------------------------------------------------------------------------+\n"
+	etmString = "Measuring Point %q (%dx / min %.3fms / max %.3fms / avg %.3fms / total %.3fms)"
 
 	ssiTLine  = "+------------------------------------------+-----------+---------------+---------------+---------------+---------------+\n"
 	ssiHeader = "| Name                                     | Count     | Act Value     | Min Value     | Max Value     | Avg Value     |\n"
 	ssiFormat = "| %-40s | %9d | %13d | %13d | %13d | %13d |\n"
+	ssiString = "Stay-Set Variable %q (%dx / act %d / min %d / max %d / avg %d)"
 
 	dsrTLine  = "+------------------------------------------+---------------------------------------------------------------------------+\n"
 	dsrHeader = "| Name                                     | Value                                                                     |\n"
@@ -45,10 +47,13 @@ const (
 )
 
 const (
-	cmdMeasuringPointsMap = iota
+	cmdMeasuringPointRead = iota
+	cmdMeasuringPointsMap
 	cmdMeasuringPointsDo
+	cmdStaySetVariableRead
 	cmdStaySetVariablesMap
 	cmdStaySetVariablesDo
+	cmdDynamicStatusRetrieverRead
 	cmdDynamicStatusRetrieversMap
 	cmdDynamicStatusRetrieversDo
 )
@@ -68,7 +73,7 @@ type command struct {
 type systemMonitor struct {
 	etmData                   map[string]*MeasuringPoint
 	ssiData                   map[string]*StaySetVariable
-	dsrData                   map[string]DynamicStatusRetriever
+	dsrData                   map[string]retrieverWrapper
 	measuringChan             chan *Measuring
 	valueChan                 chan *value
 	retrieverRegistrationChan chan *retrieverRegistration
@@ -83,7 +88,7 @@ func init() {
 	monitor = &systemMonitor{
 		etmData:                   make(map[string]*MeasuringPoint),
 		ssiData:                   make(map[string]*StaySetVariable),
-		dsrData:                   make(map[string]DynamicStatusRetriever),
+		dsrData:                   make(map[string]retrieverWrapper),
 		measuringChan:             make(chan *Measuring, 1000),
 		valueChan:                 make(chan *value, 1000),
 		retrieverRegistrationChan: make(chan *retrieverRegistration, 10),
@@ -103,6 +108,17 @@ func Measure(id string, f func()) {
 	m := BeginMeasuring(id)
 	f()
 	m.EndMeasuring()
+}
+
+// ReadMeasuringPoint returns the measuring point for an id.
+func ReadMeasuringPoint(id string) (*MeasuringPoint, error) {
+	cmd := &command{cmdMeasuringPointRead, id, make(chan interface{})}
+	monitor.commandChan <- cmd
+	resp := <-cmd.respChan
+	if err, ok := resp.(error); ok {
+		return nil, err
+	}
+	return resp.(*MeasuringPoint), nil
 }
 
 // MeasuringPointsMap performs the function f for all measuring points
@@ -154,9 +170,20 @@ func MeasuringPointsPrintAll() {
 	MeasuringPointsWrite(os.Stdout, func(mp *MeasuringPoint) bool { return true })
 }
 
-// SetValue sets a value of a stay-set variable.
-func SetValue(id string, v int64) {
+// SetVariable sets a value of a stay-set variable.
+func SetVariable(id string, v int64) {
 	monitor.valueChan <- &value{id, v}
+}
+
+// ReadVariable returns the stay-set variable for an id.
+func ReadVariable(id string) (*StaySetVariable, error) {
+	cmd := &command{cmdStaySetVariableRead, id, make(chan interface{})}
+	monitor.commandChan <- cmd
+	resp := <-cmd.respChan
+	if err, ok := resp.(error); ok {
+		return nil, err
+	}
+	return resp.(*StaySetVariable), nil
 }
 
 // StaySetVariablesMap performs the function f for all variables
@@ -209,9 +236,15 @@ func Register(id string, rf DynamicStatusRetriever) {
 	monitor.retrieverRegistrationChan <- &retrieverRegistration{id, rf}
 }
 
-// Unregister unregisters a dynamic status retriever function.
-func Unregister(id string) {
-	monitor.retrieverRegistrationChan <- &retrieverRegistration{id, nil}
+// ReadStatus returns the dynamic status for an id.
+func ReadStatus(id string) (string, error) {
+	cmd := &command{cmdDynamicStatusRetrieverRead, id, make(chan interface{})}
+	monitor.commandChan <- cmd
+	resp := <-cmd.respChan
+	if err, ok := resp.(error); ok {
+		return "", err
+	}
+	return resp.(string), nil
 }
 
 // DynamicStatusValuesMap performs the function f for all status values
@@ -282,13 +315,16 @@ func backend() {
 			}
 		case registration := <-monitor.retrieverRegistrationChan:
 			// Received a new retriever for registration.
-			if registration.dsr != nil {
-				// Register a new retriever.
-				monitor.dsrData[registration.id] = registration.dsr
-			} else {
-				// Deregister a retriever.
-				delete(monitor.dsrData, registration.id)
+			wrapper := func() (ret string, err error) {
+				defer func() {
+					if r := recover(); r != nil {
+						err = fmt.Errorf("status error: %v", r)
+					}
+				}()
+				ret = registration.dsr()
+				return
 			}
+			monitor.dsrData[registration.id] = wrapper
 		case cmd := <-monitor.commandChan:
 			// Receivedd a command to process.
 			processCommand(cmd)
@@ -299,6 +335,17 @@ func backend() {
 // Process a command.
 func processCommand(cmd *command) {
 	switch cmd.opCode {
+	case cmdMeasuringPointRead:
+		// Read just one measuring point.
+		id := cmd.args.(string)
+		if mp, ok := monitor.etmData[id]; ok {
+			// Measuring point found.
+			clone := *mp
+			cmd.respChan <- &clone
+		} else {
+			// Measuring point does not exist.
+			cmd.respChan <- fmt.Errorf("measuring point %q does not exist", id)
+		}
 	case cmdMeasuringPointsMap:
 		// Map the measuring points.
 		var resp []interface{}
@@ -315,6 +362,17 @@ func processCommand(cmd *command) {
 		f := cmd.args.(func(*MeasuringPoint))
 		for _, mp := range monitor.etmData {
 			f(mp)
+		}
+	case cmdStaySetVariableRead:
+		// Read just one stay-set variable.
+		id := cmd.args.(string)
+		if ssv, ok := monitor.ssiData[id]; ok {
+			// Variable found.
+			clone := *ssv
+			cmd.respChan <- &clone
+		} else {
+			// Variable does not exist.
+			cmd.respChan <- fmt.Errorf("stay-set variable %q does not exist", id)
 		}
 	case cmdStaySetVariablesMap:
 		// Map the stay-set variables.
@@ -333,14 +391,34 @@ func processCommand(cmd *command) {
 		for _, ssv := range monitor.ssiData {
 			f(ssv)
 		}
+	case cmdDynamicStatusRetrieverRead:
+		// Read just one dynamic status.
+		id := cmd.args.(string)
+		if dsr, ok := monitor.dsrData[id]; ok {
+			// Dynamic status found.
+			dsv, err := dsr()
+			if err != nil {
+				cmd.respChan <- err
+			} else {
+				cmd.respChan <- dsv
+			}
+		} else {
+			// Dynamic status does not exist.
+			cmd.respChan <- fmt.Errorf("dynamic status %q does not exist", id)
+		}
 	case cmdDynamicStatusRetrieversMap:
 		// Map the return values of the dynamic status
 		// retriever functions.
 		var resp []interface{}
 		f := cmd.args.(func(string, string) interface{})
 		for id, dsr := range monitor.dsrData {
-			dsv := dsr()
-			v := f(id, dsv)
+			var v interface{}
+			dsv, err := dsr()
+			if err != nil {
+				v = f(id, err.Error())
+			} else {
+				v = f(id, dsv)
+			}
 			if v != nil {
 				resp = append(resp, v)
 			}
@@ -351,8 +429,12 @@ func processCommand(cmd *command) {
 		// dynamic status retriever functions.
 		f := cmd.args.(func(string, string))
 		for id, dsr := range monitor.dsrData {
-			dsv := dsr()
-			f(id, dsv)
+			dsv, err := dsr()
+			if err != nil {
+				f(id, err.Error())
+			} else {
+				f(id, dsv)
+			}
 		}
 	}
 }
@@ -415,6 +497,13 @@ func (mp *MeasuringPoint) update(m *Measuring) {
 	mp.AvgDuration = time.Duration(mp.TtlDuration.Nanoseconds() / mp.Count)
 }
 
+// String implements the Stringer interface.
+func (mp MeasuringPoint) String() string {
+	pf := func(d time.Duration) float64 { return float64(d) / 1000000.0 }
+	return fmt.Sprintf(etmString, mp.Id, mp.Count, pf(mp.MinDuration), pf(mp.MaxDuration),
+		pf(mp.AvgDuration), pf(mp.TtlDuration))
+}
+
 // value stores a stay-set variable with a given id.
 type value struct {
 	id    string
@@ -460,9 +549,17 @@ func (ssv *StaySetVariable) update(v *value) {
 	ssv.AvgValue = ssv.total / ssv.Count
 }
 
+// String implements the Stringer interface.
+func (ssv StaySetVariable) String() string {
+	return fmt.Sprintf(ssiString, ssv.Id, ssv.Count, ssv.ActValue, ssv.MinValue, ssv.MaxValue, ssv.AvgValue)
+}
+
 // DynamicStatusRetriever is called by the server and
 // returns a current status as string.
 type DynamicStatusRetriever func() string
+
+// retrieverWrapper ensures a saver retriever calling.
+type retrieverWrapper func() (string, error)
 
 // New registration of a retriever function.
 type retrieverRegistration struct {

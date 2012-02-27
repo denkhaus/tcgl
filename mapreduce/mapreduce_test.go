@@ -12,6 +12,7 @@ package mapreduce
 //--------------------
 
 import (
+	"code.google.com/p/tcgl/asserts"
 	"code.google.com/p/tcgl/identifier"
 	"fmt"
 	"math/rand"
@@ -25,33 +26,28 @@ import (
 
 // Test the MapReduce function.
 func TestMapReduce(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
 	// Start data producer.
 	orderChan := generateTestOrders(200000)
-
 	// Define map and reduce functions.
 	mapFunc := func(in *KeyValue, mapEmitChan KeyValueChan) {
 		o := in.Value.(*Order)
-
 		// Emit analysis data for each item.
-
 		for _, i := range o.Items {
 			unitDiscount := (i.UnitPrice / 100.0) * i.DiscountPerc
 			totalDiscount := unitDiscount * float64(i.Count)
 			totalAmount := (i.UnitPrice - unitDiscount) * float64(i.Count)
 			analysis := &OrderItemAnalysis{i.ArticleNo, i.Count, totalAmount, totalDiscount}
 			articleNo := strconv.Itoa(i.ArticleNo)
-
+			// Emit the analysis.
 			mapEmitChan <- &KeyValue{articleNo, analysis}
 		}
 	}
-
 	reduceFunc := func(inChan KeyValueChan, reduceEmitChan KeyValueChan) {
 		memory := make(map[string]*OrderItemAnalysis)
-
 		// Collect emitted analysis data.
 		for kv := range inChan {
 			analysis := kv.Value.(*OrderItemAnalysis)
-
 			if existing, ok := memory[kv.Key]; ok {
 				existing.Quantity += analysis.Quantity
 				existing.Amount += analysis.Amount
@@ -60,16 +56,20 @@ func TestMapReduce(t *testing.T) {
 				memory[kv.Key] = analysis
 			}
 		}
-
 		// Emit it to map/reduce caller.
 		for articleNo, analysis := range memory {
 			reduceEmitChan <- &KeyValue{articleNo, analysis}
 		}
 	}
-
+	articleLessFunc := func(a *KeyValue, b *KeyValue) bool {
+		return a.Value.(*OrderItemAnalysis).ArticleNo < b.Value.(*OrderItemAnalysis).ArticleNo
+	}
 	// Now call MapReduce.
-	for result := range SortedMapReduce(orderChan, mapFunc, 100, reduceFunc, 20, KeyLessFunc) {
-		t.Logf("%v\n", result.Value)
+	articleNo := -1
+	for oiaKV := range SortedMapReduce(orderChan, mapFunc, 100, reduceFunc, 20, articleLessFunc)  {
+		oia := oiaKV.Value.(*OrderItemAnalysis)
+		assert.True(oia.ArticleNo > articleNo, "Article numbers shall increase.")
+		articleNo = oia.ArticleNo
 	}
 }
 
@@ -94,7 +94,6 @@ type Order struct {
 
 func (o *Order) String() string {
 	msg := "ON: %v / CN: %4v / I: %v"
-
 	return fmt.Sprintf(msg, o.OrderNo, o.CustomerNo, len(o.Items))
 }
 
@@ -108,47 +107,32 @@ type OrderItemAnalysis struct {
 
 func (oia *OrderItemAnalysis) String() string {
 	msg := "AN: %5v / Q: %4v / A: %10.2f € / D: %10.2f €"
-
 	return fmt.Sprintf(msg, oia.ArticleNo, oia.Quantity, oia.Amount, oia.Discount)
 }
 
 // Order list.
 type OrderList []*Order
 
-func (l OrderList) Len() int {
-	return len(l)
-}
-
-func (l OrderList) Less(i, j int) bool {
-	return l[i].CustomerNo < l[j].CustomerNo
-}
-
-func (l OrderList) Swap(i, j int) {
-	l[i], l[j] = l[j], l[i]
-}
+func (l OrderList) Len() int { return len(l) }
+func (l OrderList) Less(i, j int) bool { return l[i].CustomerNo < l[j].CustomerNo }
+func (l OrderList) Swap(i, j int) { l[i], l[j] = l[j], l[i] }
 
 // Generate test order and push them into a channel.
 func generateTestOrders(count int) KeyValueChan {
 	articleMaxNo := 9999
 	unitPrices := make([]float64, articleMaxNo+1)
-
 	for i := 0; i < articleMaxNo+1; i++ {
 		unitPrices[i] = rand.Float64() * 100.0
 	}
-
 	kvc := make(KeyValueChan)
-
 	go func() {
 		for i := 0; i < count; i++ {
 			order := new(Order)
-
 			order.OrderNo = identifier.NewUUID()
 			order.CustomerNo = rand.Intn(999) + 1
 			order.Items = make([]*OrderItem, rand.Intn(9)+1)
-
 			for j := 0; j < len(order.Items); j++ {
 				articleNo := rand.Intn(articleMaxNo)
-
 				order.Items[j] = &OrderItem{
 					ArticleNo:    articleNo,
 					Count:        rand.Intn(9) + 1,
@@ -156,13 +140,10 @@ func generateTestOrders(count int) KeyValueChan {
 					DiscountPerc: rand.Float64() * 4.0,
 				}
 			}
-
 			kvc <- &KeyValue{order.OrderNo.String(), order}
 		}
-
 		close(kvc)
 	}()
-
 	return kvc
 }
 

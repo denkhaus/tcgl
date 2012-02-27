@@ -25,7 +25,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Simple Markup Language - Release 2012-01-24"
+const RELEASE = "Tideland Common Go Library - Simple Markup Language - Release 2012-02-16"
 
 //--------------------
 // PROCESSOR
@@ -65,16 +65,13 @@ type TagNode struct {
 // chars 'a' to 'z', '0' to '9' and '-'. The separator is a colon.
 func NewTagNode(tag string) *TagNode {
 	tmp := strings.ToLower(tag)
-
 	if !validIdentifier(tmp) {
 		return nil
 	}
-
 	tn := &TagNode{
 		tag:      strings.Split(tmp, ":"),
 		children: make([]Node, 0),
 	}
-
 	return tn
 }
 
@@ -82,11 +79,9 @@ func NewTagNode(tag string) *TagNode {
 // and returns it.
 func (tn *TagNode) AppendTag(tag string) *TagNode {
 	n := NewTagNode(tag)
-
 	if n != nil {
 		tn.children = append(tn.children, n)
 	}
-
 	return n
 }
 
@@ -94,7 +89,6 @@ func (tn *TagNode) AppendTag(tag string) *TagNode {
 // returns it.
 func (tn *TagNode) AppendTagNode(n *TagNode) *TagNode {
 	tn.children = append(tn.children, n)
-
 	return n
 }
 
@@ -102,9 +96,7 @@ func (tn *TagNode) AppendTagNode(n *TagNode) *TagNode {
 // returns it.
 func (tn *TagNode) AppendText(text string) *TextNode {
 	n := NewTextNode(text)
-
 	tn.children = append(tn.children, n)
-
 	return n
 }
 
@@ -113,13 +105,10 @@ func (tn *TagNode) AppendText(text string) *TextNode {
 // node will be returned.
 func (tn *TagNode) AppendTaggedText(tag, text string) *TagNode {
 	n := NewTagNode(tag)
-
 	if n != nil {
 		n.AppendText(text)
-
 		tn.children = append(tn.children, n)
 	}
-
 	return n
 }
 
@@ -127,34 +116,33 @@ func (tn *TagNode) AppendTaggedText(tag, text string) *TagNode {
 // returns it.
 func (tn *TagNode) AppendTextNode(n *TextNode) *TextNode {
 	tn.children = append(tn.children, n)
-
 	return n
 }
 
+func (tn TagNode) Tag() string {
+	return strings.Join(tn.tag, ":")	
+}
+
 // Len return the number of children of this node.
-func (tn *TagNode) Len() int {
+func (tn TagNode) Len() int {
 	return len(tn.children)
 }
 
 // ProcessWith processes the node and all chidlren recursively
 // with the passed processor.
-func (tn *TagNode) ProcessWith(p Processor) {
+func (tn TagNode) ProcessWith(p Processor) {
 	p.OpenTag(tn.tag)
-
 	for _, child := range tn.children {
 		child.ProcessWith(p)
 	}
-
 	p.CloseTag(tn.tag)
 }
 
 // String returns the tag node as string.
-func (tn *TagNode) String() string {
+func (tn TagNode) String() string {
 	buf := bytes.NewBufferString("")
 	spp := NewSmlWriterProcessor(buf, true)
-
 	tn.ProcessWith(spp)
-
 	return buf.String()
 }
 
@@ -205,7 +193,6 @@ func validIdentifier(id string) bool {
 			}
 		}
 	}
-
 	return true
 }
 
@@ -248,9 +235,7 @@ func NewSmlReader(reader io.Reader) *SmlReader {
 		reader: bufio.NewReader(reader),
 		index:  -1,
 	}
-
 	node, ctrl := sr.readNode()
-
 	switch ctrl {
 	case ctrlClose:
 		sr.root = node
@@ -264,7 +249,6 @@ func NewSmlReader(reader io.Reader) *SmlReader {
 
 		sr.error = errors.New(msg)
 	}
-
 	return sr
 }
 
@@ -278,14 +262,10 @@ func (sr *SmlReader) RootTagNode() (*TagNode, error) {
 func (sr *SmlReader) readNode() (*TagNode, int) {
 	var node *TagNode
 	var buffer *bytes.Buffer
-
 	mode := modeInit
-
 	for {
 		rune, ctrl := sr.readRune()
-
 		sr.index++
-
 		switch mode {
 		case modeInit:
 			// Before the first opening bracket.
@@ -307,7 +287,6 @@ func (sr *SmlReader) readNode() (*TagNode, int) {
 				if buffer.Len() == 0 {
 					return nil, ctrlInvalid
 				}
-
 				node = NewTagNode(buffer.String())
 				buffer = bytes.NewBufferString("")
 				mode = modeText
@@ -315,9 +294,7 @@ func (sr *SmlReader) readNode() (*TagNode, int) {
 				if buffer.Len() == 0 {
 					return nil, ctrlInvalid
 				}
-
 				node = NewTagNode(buffer.String())
-
 				return node, ctrlClose
 			default:
 				return nil, ctrlInvalid
@@ -330,40 +307,29 @@ func (sr *SmlReader) readNode() (*TagNode, int) {
 				return nil, ctrlEOF
 			case ctrlOpen:
 				text := strings.TrimSpace(buffer.String())
-
 				if len(text) > 0 {
 					node.AppendText(text)
 				}
-
 				buffer = bytes.NewBufferString("")
-
 				sr.reader.UnreadRune()
-
 				subnode, subctrl := sr.readNode()
-
 				if subctrl == ctrlClose {
 					// Correct closed subnode.
-
 					node.AppendTagNode(subnode)
 				} else {
 					// Error while reading the subnode.
-
 					return nil, subctrl
 				}
 			case ctrlClose:
 				text := strings.TrimSpace(buffer.String())
-
 				if len(text) > 0 {
 					node.AppendText(text)
 				}
-
 				return node, ctrlClose
 			case ctrlEscape:
 				rune, ctrl = sr.readRune()
-
 				if ctrl == ctrlOpen || ctrl == ctrlClose || ctrl == ctrlEscape {
 					buffer.WriteRune(rune)
-
 					sr.index++
 				} else {
 					return nil, ctrlInvalid
@@ -373,16 +339,13 @@ func (sr *SmlReader) readNode() (*TagNode, int) {
 			}
 		}
 	}
-
 	return nil, ctrlEOF
 }
 
 // Reads one rune of the reader.
 func (sr *SmlReader) readRune() (r rune, ctrl int) {
 	var size int
-
 	r, size, sr.error = sr.reader.ReadRune()
-
 	switch {
 	case size == 0:
 		return r, ctrlEOF
@@ -405,7 +368,6 @@ func (sr *SmlReader) readRune() (r rune, ctrl int) {
 	case unicode.IsSpace(r):
 		return r, ctrlSpace
 	}
-
 	return r, ctrlText
 }
 
@@ -427,14 +389,12 @@ func NewSmlWriterProcessor(writer io.Writer, prettyPrint bool) *SmlWriterProcess
 		prettyPrint: prettyPrint,
 		indentLevel: 0,
 	}
-
 	return swp
 }
 
 // OpenTag writes the opening of a tag.
 func (swp *SmlWriterProcessor) OpenTag(tag []string) {
 	swp.writeIndent(true)
-
 	swp.writer.WriteString("{")
 	swp.writer.WriteString(strings.Join(tag, ":"))
 }
@@ -442,11 +402,9 @@ func (swp *SmlWriterProcessor) OpenTag(tag []string) {
 // CloseTag writes the closing of a tag.
 func (swp *SmlWriterProcessor) CloseTag(tag []string) {
 	swp.writer.WriteString("}")
-
 	if swp.prettyPrint {
 		swp.indentLevel--
 	}
-
 	swp.writer.Flush()
 }
 
@@ -455,9 +413,7 @@ func (swp *SmlWriterProcessor) Text(text string) {
 	ta := strings.Replace(text, "^", "^^", -1)
 	tb := strings.Replace(ta, "{", "^{", -1)
 	tc := strings.Replace(tb, "}", "^}", -1)
-
 	swp.writeIndent(false)
-
 	swp.writer.WriteString(tc)
 }
 
@@ -467,11 +423,9 @@ func (swp *SmlWriterProcessor) writeIndent(increase bool) {
 		if swp.indentLevel > 0 {
 			swp.writer.WriteString("\n")
 		}
-
 		for i := 0; i < swp.indentLevel; i++ {
 			swp.writer.WriteString("\t")
 		}
-
 		if increase {
 			swp.indentLevel++
 		}

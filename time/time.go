@@ -19,34 +19,13 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Time - Release 2012-01-24"
+const RELEASE = "Tideland Common Go Library - Time - Release 2012-02-24"
 
 //--------------------
-// DATE AND TIME
+// RANGES
 //--------------------
 
-// NsMicroseconds calcs nanoseconds from microseconds.
-func NsMicroseconds(count int64) int64 { return count * 1e3 }
-
-// NsMilliseconds calcs nanoseconds from milliseconds.
-func NsMilliseconds(count int64) int64 { return NsMicroseconds(count * 1e3) }
-
-// NsSeconds calcs nanoseconds from seconds.
-func NsSeconds(count int64) int64 { return NsMilliseconds(count * 1e3) }
-
-// NsMinutes calcs nanoseconds from minutes.
-func NsMinutes(count int64) int64 { return NsSeconds(count * 60) }
-
-// NsHours calcs nanoseconds from hours.
-func NsHours(count int64) int64 { return NsMinutes(count * 60) }
-
-// NsDays calcs nanoseconds from days.
-func NsDays(count int64) int64 { return NsHours(count * 24) }
-
-// NsWeeks calcs nanoseconds from weeks.
-func NsWeeks(count int64) int64 { return NsDays(count * 7) }
-
-// Test if the year of a time is in a given list.
+// YearInList test if the year of a time is in a given list.
 func YearInList(time time.Time, years []int) bool {
 	for _, year := range years {
 		if time.Year() == year {

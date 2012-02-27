@@ -12,10 +12,8 @@ package sort
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/identifier"
-	"fmt"
+	"code.google.com/p/tcgl/asserts"
 	"math/rand"
-	"runtime"
 	"sort"
 	"testing"
 	"time"
@@ -27,136 +25,61 @@ import (
 
 // Test pivot.
 func TestPivot(t *testing.T) {
-	a := make(sort.IntSlice, 15)
-
-	for i := 0; i < len(a); i++ {
-		a[i] = rand.Intn(99)
-	}
-
-	plo, phi := partition(a, 0, len(a)-1)
-
-	t.Logf("PLO  : %v", plo)
-	t.Logf("PHI  : %v", phi)
-	t.Logf("PDATA: %v", a[phi-1])
-	t.Logf("PIVOT: %v", a)
+	assert := asserts.NewTestingAsserts(t, true)
+	// Make some test data.
+	td := ByteSlice{17, 20, 13, 15, 51, 6, 21, 11, 23, 47, 59, 88, 78, 67, 94}
+	plh, puh := partition(td, 0, len(td)-1)
+	// Asserts.
+	assert.Equal(plh, 3, "Pivot lower half.")
+	assert.Equal(puh, 5, "Pivot upper half.")
+	assert.Equal(td[puh-1], byte(17), "Data at median.")
+	assert.Equal(td, ByteSlice{11, 13, 15, 6, 17, 20, 21, 94, 23, 47, 59, 88, 78, 67, 51}, "Prepared data.")
 }
 
 // Test sort shootout.
 func TestSort(t *testing.T) {
-	ola := generateTestOrders(25000)
-	olb := generateTestOrders(25000)
-	olc := generateTestOrders(25000)
-	old := generateTestOrders(25000)
-
-	ta := time.Now()
-	Sort(ola)
-	tb := time.Now()
-	sort.Sort(olb)
-	tc := time.Now()
-	insertionSort(olc, 0, len(olc)-1)
-	td := time.Now()
-	sequentialQuickSort(old, 0, len(olc)-1)
-	te := time.Now()
-
-	t.Logf("PQS: %v", tb.Sub(ta))
-	t.Logf(" QS: %v", tc.Sub(tb))
-	t.Logf(" IS: %v", td.Sub(tc))
-	t.Logf("SQS: %v", te.Sub(td))
-}
-
-// Test the parallel quicksort function.
-func TestParallelQuickSort(t *testing.T) {
-	t.Logf("PQS MaxProcs: %v", runtime.GOMAXPROCS(0))
-
-	ol := generateTestOrders(1000000)
-
-	Sort(ol)
-
-	cn := 0
-
-	for _, o := range ol {
-		if cn > o.CustomerNo {
-			t.Errorf("Customer No %v in wrong order!", o.CustomerNo)
-
-			cn = o.CustomerNo
-		} else {
-			cn = o.CustomerNo
-		}
-	}
+	// Make some test data.
+	isa := generateIntSlice(100000)
+	isb := generateIntSlice(100000)
+	isc := generateIntSlice(100000)
+	isd := generateIntSlice(100000)
+	// No use different sorts.
+	dqs := duration(func() { sort.Sort(isb) })
+	dis := duration(func() { insertionSort(isc, 0, len(isc)-1) })
+	dsqs := duration(func() { sequentialQuickSort(isd, 0, len(isd)-1) })
+	dpqs := duration(func() { Sort(isa) })
+	// Log durations.
+	t.Logf("            QS: %v", dqs)
+	t.Logf("Insertion Sort: %v", dis)
+	t.Logf(" Sequential QS: %v", dsqs)
+	t.Logf("   Parallel QS: %v", dpqs)
 }
 
 //--------------------
 // HELPERS
 //--------------------
 
-// Order item type.
-type OrderItem struct {
-	ArticleNo    int
-	Count        int
-	UnitPrice    float64
-	DiscountPerc float64
-}
+// ByteSlice is a number of bytes for sorting implementing the sort.Interface.
+type ByteSlice []byte
 
-// Order type.
-type Order struct {
-	OrderNo    identifier.UUID
-	CustomerNo int
-	Items      []*OrderItem
-}
+func (bs ByteSlice) Len() int { return len(bs) }
+func (bs ByteSlice) Less(i, j int) bool { return bs[i] < bs[j] }
+func (bs ByteSlice) Swap(i, j int) { bs[i], bs[j] = bs[j], bs[i] }
 
-func (o *Order) String() string {
-	msg := "ON: %v / CN: %4v / I: %v"
-
-	return fmt.Sprintf(msg, o.OrderNo, o.CustomerNo, len(o.Items))
-}
-
-// Order list.
-type OrderList []*Order
-
-func (l OrderList) Len() int {
-	return len(l)
-}
-
-func (l OrderList) Less(i, j int) bool {
-	return l[i].CustomerNo < l[j].CustomerNo
-}
-
-func (l OrderList) Swap(i, j int) {
-	l[i], l[j] = l[j], l[i]
-}
-
-// generateTestOrders produces a list of random orders.
-func generateTestOrders(count int) OrderList {
-	articleMaxNo := 9999
-	unitPrices := make([]float64, articleMaxNo+1)
-	orderList := make(OrderList, count)
-
-	for i := 0; i < articleMaxNo+1; i++ {
-		unitPrices[i] = rand.Float64() * 100.0
-	}
-
+// generateIntSlice generates a slice of ints.
+func generateIntSlice(count int) sort.IntSlice {
+	is := make([]int, count)
 	for i := 0; i < count; i++ {
-		order := new(Order)
-
-		order.OrderNo = identifier.NewUUID()
-		order.CustomerNo = rand.Intn(999) + 1
-		order.Items = make([]*OrderItem, rand.Intn(9)+1)
-
-		for j := 0; j < len(order.Items); j++ {
-			articleNo := rand.Intn(articleMaxNo)
-
-			order.Items[j] = &OrderItem{
-				ArticleNo:    articleNo,
-				Count:        rand.Intn(9) + 1,
-				UnitPrice:    unitPrices[articleNo],
-				DiscountPerc: rand.Float64() * 4.0,
-			}
-		}
-
-		orderList[i] = order
+		is[i] = rand.Int()
 	}
+	return is
+}
 
-	return orderList
+// duration measures the duration of a function execution.
+func duration(f func()) time.Duration {
+	start := time.Now()
+	f()
+	return time.Now().Sub(start)
 }
 
 // EOF

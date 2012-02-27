@@ -26,7 +26,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Utilities - Release 2012-01-30"
+const RELEASE = "Tideland Common Go Library - Utilities - Release 2012-02-13"
 
 //--------------------
 // DEBUGGING
@@ -50,46 +50,41 @@ func Debugf(format string, args ...interface{}) {
 //--------------------
 
 // Dispatch a string to a method of a type.
-func Dispatch(variable interface{}, name string, args ...interface{}) ([]interface{}, bool) {
+func Dispatch(variable interface{}, name string, args ...interface{}) (interface{}, error) {
 	numArgs := len(args)
 	value := reflect.ValueOf(variable)
 	valueType := value.Type()
 	numMethods := valueType.NumMethod()
-
+	// Search mathching method and call it.
 	for i := 0; i < numMethods; i++ {
 		method := valueType.Method(i)
-
 		if (method.PkgPath == "") && (method.Type.NumIn() == numArgs+1) {
-
 			if method.Name == name {
 				// Prepare all args with variable and args.
-
 				callArgs := make([]reflect.Value, numArgs+1)
-
 				callArgs[0] = value
-
 				for i, a := range args {
 					callArgs[i+1] = reflect.ValueOf(a)
 				}
-
 				// Make the function call.
-
 				results := method.Func.Call(callArgs)
-
 				// Transfer results into slice of interfaces.
-
-				allResults := make([]interface{}, len(results))
-
-				for i, v := range results {
-					allResults[i] = v.Interface()
+				l := len(results)
+				var retVal interface{}
+				if l == 1 {
+					retVal = results[0].Interface()
+				} else if l > 1 {
+					tmpRetVal := make([]interface{}, l)
+					for i, v := range results {
+						tmpRetVal[i] = v.Interface()
+					}
+					retVal = tmpRetVal
 				}
-
-				return allResults, true
+				return retVal, nil
 			}
 		}
 	}
-
-	return nil, false
+	return nil, fmt.Errorf("method %q with %d arguments not found", name, len(args))
 }
 
 //--------------------
