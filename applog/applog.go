@@ -1,0 +1,234 @@
+// Tideland Common Go Library - Application Log
+//
+// Copyright (C) 2012 Frank Mueller / Oldenburg / Germany
+//
+// All rights reserved. Use of this source code is governed 
+// by the new BSD license.
+
+package applog
+
+//--------------------
+// IMPORTS
+//--------------------
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path"
+	"runtime"
+	"strings"
+	"time"
+)
+
+//--------------------
+// CONST
+//--------------------
+
+const RELEASE = "Tideland Common Go Library - Application Log - Release 2012-03-05"
+
+//--------------------
+// LOG LEVEL
+//--------------------
+
+// Log levels to control the logging output.
+const (
+	LevelDebug = iota
+	LevelInfo
+	LevelWarning
+	LevelError
+	LevelCritical
+)
+
+// logLevel controls the global log level used by the logger.
+var level = LevelDebug
+
+// LogLevel returns the global log level and can be used in
+// own implementations of the logger interface.
+func Level() int {
+	return level
+}
+
+// SetLogLevel sets the global log level used by the simple
+// logger.
+func SetLevel(l int) {
+	level = l
+}
+
+//--------------------
+// LOGGER
+//--------------------
+
+// Logger is the interface for different logger implementations.
+type Logger interface {
+	// Debug logs a message at debug level.
+	Debug(msg string)
+	// Info logs a message at info level.
+	Info(msg string)
+	// Warning logs a message at warning level.
+	Warning(msg string)
+	// Error logs a message at error level.
+	Error(msg string)
+	// Critical logs a message at critical level.
+	Critical(msg string)
+}
+
+// logger references the used application logger.
+var logger Logger = NewStandardLogger(os.Stdout)
+
+// SetLogger sets a new logger.
+func SetLogger(l Logger) {
+	logger = l
+}
+
+// StandardLogger is a simple logger writing to the given writer. It
+// doesn't handle the levels differently.
+type StandardLogger struct {
+	out io.Writer
+}
+
+// NewStandardLogger creates the standard logger.
+func NewStandardLogger(out io.Writer) Logger {
+	return &StandardLogger{out}
+}
+
+// Debug logs a message at debug level.
+func (sl StandardLogger) Debug(msg string) {
+	io.WriteString(sl.out, msg)
+	io.WriteString(sl.out, "\n")
+}
+
+// Info logs a message at info level.
+func (sl StandardLogger) Info(msg string) {
+	io.WriteString(sl.out, msg)
+	io.WriteString(sl.out, "\n")
+}
+
+// Warning logs a message at warning level.
+func (sl StandardLogger) Warning(msg string) {
+	io.WriteString(sl.out, msg)
+	io.WriteString(sl.out, "\n")
+}
+
+// Error logs a message at error level.
+func (sl StandardLogger) Error(msg string) {
+	io.WriteString(sl.out, msg)
+	io.WriteString(sl.out, "\n")
+}
+
+// Critical logs a message at critical level.
+func (sl StandardLogger) Critical(msg string) {
+	io.WriteString(sl.out, msg)
+	io.WriteString(sl.out, "\n")
+}
+
+//--------------------
+// LOGGING
+//--------------------
+
+// Debugf logs a message at debug level.
+func Debugf(format string, args ...interface{}) {
+	if level <= LevelDebug {
+		ci := retrieveCallInfo()
+		fi := fmt.Sprintf(format, args...)
+		msg := fmt.Sprintf("[D] %s %s", ci.verboseFormat(), fi)
+
+		logger.Debug(msg)
+	}
+}
+
+// Infof logs a message at info level.
+func Infof(format string, args ...interface{}) {
+	if level <= LevelInfo {
+		ci := retrieveCallInfo()
+		fi := fmt.Sprintf(format, args...)
+		msg := fmt.Sprintf("[I] %s %s", ci.shortFormat(), fi)
+
+		logger.Info(msg)
+	}
+}
+
+// Warningf logs a message at warning level.
+func Warningf(format string, args ...interface{}) {
+	if level <= LevelWarning {
+		ci := retrieveCallInfo()
+		fi := fmt.Sprintf(format, args...)
+		msg := fmt.Sprintf("[W] %s %s", ci.shortFormat(), fi)
+
+		logger.Warning(msg)
+	}
+}
+
+// Errorf logs a message at error level.
+func Errorf(format string, args ...interface{}) {
+	if level <= LevelError {
+		ci := retrieveCallInfo()
+		fi := fmt.Sprintf(format, args...)
+		msg := fmt.Sprintf("[E] %s %s", ci.shortFormat(), fi)
+
+		logger.Error(msg)
+	}
+}
+
+// Criticalf logs a message at critical level.
+func Criticalf(format string, args ...interface{}) {
+	ci := retrieveCallInfo()
+	fi := fmt.Sprintf(format, args...)
+	msg := fmt.Sprintf("[C] %s %s", ci.verboseFormat(), fi)
+
+	logger.Critical(msg)
+}
+
+//--------------------
+// HELPER
+//--------------------
+
+// timeFormat controls how the timestamp is printed.
+const timeFormat = "2006-01-02 15:04:05 Z07:00"
+
+// callInfo bundles the info about the call environment, date and time
+// when a logging statement occured.
+type callInfo struct {
+	now         time.Time
+	packageName string
+	fileName    string
+	funcName    string
+	line        int
+}
+
+// shortFormat returns a string representation in a short variant.
+func (ci *callInfo) shortFormat() string {
+	return fmt.Sprintf("%s [%s]", ci.now.Format(timeFormat), ci.packageName)
+}
+
+// verboseFormat returns a string representation in a more verbose variant.
+func (ci *callInfo) verboseFormat() string {
+	return fmt.Sprintf("%s [%s] (%s:%s:%d)", ci.now.Format(timeFormat), ci.packageName, ci.fileName, ci.funcName, ci.line)
+}
+
+// retrieveCallInfo 
+func retrieveCallInfo() *callInfo {
+	pc, file, line, _ := runtime.Caller(2)
+	_, fileName := path.Split(file)
+	parts := strings.Split(runtime.FuncForPC(pc).Name(), ".")
+	pl := len(parts)
+	packageName := ""
+	funcName := parts[pl-1]
+
+	if parts[pl-2][0] == '(' {
+		funcName = parts[pl-2] + "." + funcName
+		packageName = strings.Join(parts[0:pl-2], ".")
+	} else {
+		packageName = strings.Join(parts[0:pl-1], ".")
+	}
+
+	return &callInfo{
+		now:         time.Now(),
+		packageName: packageName,
+		fileName:    fileName,
+		funcName:    funcName,
+		line:        line,
+	}
+}
+
+// EOF

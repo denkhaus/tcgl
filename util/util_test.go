@@ -20,13 +20,6 @@ import (
 // TESTS
 //--------------------
 
-// Test debug statement.
-func TestDebug(t *testing.T) {
-	Debugf("Hello, I'm debugging %v!", "here")
-	SetLogLevel(LogLevelError)
-	Debugf("Should not be shown!")
-}
-
 // Test the method dispatch function.
 func TestDispatch(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)

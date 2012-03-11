@@ -26,7 +26,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Asserts - Release 2012-02-27"
+const RELEASE = "Tideland Common Go Library - Asserts - Release 2012-03-01"
 
 //--------------------
 // TEST
@@ -352,10 +352,10 @@ func (a Asserts) Length(obtained interface{}, expected int, msg string) bool {
 	case reflect.Array, reflect.Chan, reflect.Map, reflect.Slice, reflect.String:
 		obtainedLen := obtainedValue.Len()
 		if obtainedLen != expected {
-			return a.failFunc(Empty, obtainedLen, expected, msg)
+			return a.failFunc(Length, obtainedLen, expected, msg)
 		}
 	default:
-		return a.failFunc(Empty, ValueDescription(obtained), 0, 
+		return a.failFunc(Length, ValueDescription(obtained), 0, 
 			"obtained type is no array, chan, map, slice, string or has method Len()")
 	}
 	return true

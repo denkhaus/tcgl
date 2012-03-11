@@ -13,37 +13,14 @@ package util
 
 import (
 	"fmt"
-	"io"
-	"log"
-	"os"
-	"path"
 	"reflect"
-	"runtime"
-	"strings"
 )
 
 //--------------------
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Utilities - Release 2012-02-13"
-
-//--------------------
-// DEBUGGING
-//--------------------
-
-// Debugf prints a debug information to the log with file and line.
-func Debugf(format string, args ...interface{}) {
-	pc, file, line, _ := runtime.Caller(1)
-	_, fileName := path.Split(file)
-	funcNameParts := strings.Split(runtime.FuncForPC(pc).Name(), ".")
-	funcNamePartsIdx := len(funcNameParts) - 1
-	funcName := funcNameParts[funcNamePartsIdx]
-	info := fmt.Sprintf(format, args...)
-	logger := NewDefaultLogger("cgl")
-
-	logger.Debugf("%s:%s:%d %v", fileName, funcName, line, info)
-}
+const RELEASE = "Tideland Common Go Library - Utilities - Release 2012-03-04"
 
 //--------------------
 // METHOD DISPATCHING
@@ -119,97 +96,6 @@ func BuildLazyIntEvaluator(evalFunc EvalFunc, initState interface{}) func() int 
 	return func() int {
 		return ef().(int)
 	}
-}
-
-//--------------------
-// LOGGER
-//--------------------
-
-// Log levels to control the logging output.
-const (
-	LogLevelDebug = iota
-	LogLevelInfo
-	LogLevelWarning
-	LogLevelError
-	LogLevelCritical
-)
-
-// logLevel controls the global log level used by the logger.
-var logLevel = LogLevelDebug
-
-// LogLevel returns the global log level and can be used in
-// own implementations of the logger interface.
-func LogLevel() int {
-	return logLevel
-}
-
-// SetLogLevel sets the global log level used by the simple
-// logger.
-func SetLogLevel(level int) {
-	logLevel = level
-}
-
-// Logger is the interface for different logger implementations.
-type Logger interface {
-	// Debugf logs a message at debug level.
-	Debugf(format string, args ...interface{})
-	// Infof logs a message at info level.
-	Infof(format string, args ...interface{})
-	// Warningf logs a message at warning level.
-	Warningf(format string, args ...interface{})
-	// Errorf logs a message at error level.
-	Errorf(format string, args ...interface{})
-	// Criticalf logs a message at critical level.
-	Criticalf(format string, args ...interface{})
-}
-
-// simpleLogger is a logger implementation using the log package.
-type simpleLogger struct {
-	logger *log.Logger
-}
-
-// NewSimpleLogger creates a logger using the log package.
-func NewSimpleLogger(out io.Writer, prefix string, flag int) Logger {
-	return &simpleLogger{log.New(out, "["+prefix+"] ", flag)}
-}
-
-// NewDefaultLogger create a simple logger on stdout with
-// printig of date and time.
-func NewDefaultLogger(prefix string) Logger {
-	return NewSimpleLogger(os.Stdout, prefix, log.Ldate|log.Ltime)
-}
-
-// Debugf logs a message at debug level.
-func (sl simpleLogger) Debugf(format string, args ...interface{}) {
-	if logLevel <= LogLevelDebug {
-		sl.logger.Printf("[debug] "+format, args...)
-	}
-}
-
-// Infof logs a message at info level.
-func (sl simpleLogger) Infof(format string, args ...interface{}) {
-	if logLevel <= LogLevelInfo {
-		sl.logger.Printf("[info] "+format, args...)
-	}
-}
-
-// Warningf logs a message at warning level.
-func (sl simpleLogger) Warningf(format string, args ...interface{}) {
-	if logLevel <= LogLevelWarning {
-		sl.logger.Printf("[warning] "+format, args...)
-	}
-}
-
-// Errorf logs a message at error level.
-func (sl simpleLogger) Errorf(format string, args ...interface{}) {
-	if logLevel <= LogLevelError {
-		sl.logger.Printf("[error] "+format, args...)
-	}
-}
-
-// Criticalf logs a message at critical level.
-func (sl simpleLogger) Criticalf(format string, args ...interface{}) {
-	sl.logger.Printf("[critical] "+format, args...)
 }
 
 // EOF
