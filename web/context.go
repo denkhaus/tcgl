@@ -12,6 +12,7 @@ package web
 //--------------------
 
 import (
+	"bytes"
 	"encoding/gob"
 	"encoding/json"
 	"errors"
@@ -114,15 +115,14 @@ func (ctx *Context) RenderTemplate(templateId string, data interface{}) {
 // MarshalJSON marshals the passed data to JSON and writes it to the response writer.
 // The HTML flag controls the data encoding.
 func (ctx *Context) MarshalJSON(data interface{}, html bool) {
-	var b []byte
-	var err error
-	if html {
-		b, err = json.MarshalForHTML(data)
-	} else {
-		b, err = json.Marshal(data)
-	}
+	b, err := json.Marshal(data)
 	if err != nil {
 		http.Error(ctx.ResponseWriter, err.Error(), http.StatusInternalServerError)
+	}
+	if html {
+		var buf bytes.Buffer
+		json.HTMLEscape(&buf, b)
+		b = buf.Bytes()
 	}
 	ctx.ResponseWriter.Header().Set("Content-Type", CT_JSON)
 	ctx.ResponseWriter.Write(b)
@@ -182,31 +182,6 @@ func (ctx *Context) UnmarshalGob(data interface{}) error {
 	err := dec.Decode(data)
 	ctx.Request.Body.Close()
 	return err
-}
-
-// Debugf logs a message at debug level.
-func (ctx *Context) Debugf(format string, args ...interface{}) {
-	srv.logger.Debugf(format, args...)
-}
-
-// Infof logs a message at info level.
-func (ctx *Context) Infof(format string, args ...interface{}) {
-	srv.logger.Infof(format, args...)
-}
-
-// Warningf logs a message at warning level.
-func (ctx *Context) Warningf(format string, args ...interface{}) {
-	srv.logger.Warningf(format, args...)
-}
-
-// Errorf logs a message at error level.
-func (ctx *Context) Errorf(format string, args ...interface{}) {
-	srv.logger.Errorf(format, args...)
-}
-
-// Criticalf logs a message at critical level.
-func (ctx *Context) Criticalf(format string, args ...interface{}) {
-	srv.logger.Criticalf(format, args...)
 }
 
 // EOF

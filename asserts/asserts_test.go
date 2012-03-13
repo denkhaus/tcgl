@@ -151,6 +151,20 @@ func TestAssertDifferent(t *testing.T) {
 	}
 }
 
+// TestAssertContainment tests the Match() assertion.
+func TestAssertContainment(t *testing.T) {
+	a := createValueAsserts(t)
+
+	a.Containment("this is a test", "is a", "should not fail")
+	a.Containment("this is 1 test", "test", "should not fail")
+	if a.Containment("this is a test", "foo", "should fail and be logged") {
+		t.Errorf("Containment() returned true")
+	}
+	if a.Containment("this is a test", "this   is   a   test", "should fail and be logged") {
+		t.Errorf("Containment() returned true")
+	}
+}
+
 // TestAssertMatch tests the Match() assertion.
 func TestAssertMatch(t *testing.T) {
 	a := createValueAsserts(t)

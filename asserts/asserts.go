@@ -26,7 +26,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Asserts - Release 2012-03-01"
+const RELEASE = "Tideland Common Go Library - Asserts - Release 2012-03-12"
 
 //--------------------
 // TEST
@@ -44,6 +44,7 @@ const (
 	Equal
 	Different
 	About
+	Containment
 	Match
 	ErrorMatch
 	Implements
@@ -63,6 +64,7 @@ var testNames = []string{
 	Equal:        "equal",
 	Different:    "different",
 	About:	      "about",
+	Containment:  "containment",
 	Match:        "match",
 	ErrorMatch:   "error match",
 	Implements:   "implements",
@@ -219,6 +221,14 @@ func (a Asserts) About(obtained, expected, extend float64, msg string) bool {
 	expectedMax := expected + extend
 	if obtained < expectedMin || obtained > expectedMax {
 		return a.failFunc(About, obtained, expected, msg)
+	}
+	return true
+}
+
+// Containment tests if obtained contains a substring.
+func (a Asserts) Containment(obtained, substr, msg string) bool {
+	if !strings.Contains(obtained, substr) {
+		return a.failFunc(Containment, obtained, substr, msg)
 	}
 	return true
 }

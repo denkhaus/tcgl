@@ -12,9 +12,9 @@ package web
 //--------------------
 
 import (
+	"code.google.com/p/tcgl/applog"
 	"code.google.com/p/tcgl/identifier"
 	"code.google.com/p/tcgl/monitoring"
-	"code.google.com/p/tcgl/util"
 	"fmt"
 	"net/http"
 	"strings"
@@ -24,7 +24,7 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library -  Web - Release 2012-01-30"
+const RELEASE = "Tideland Common Go Library -  Web - Release 2012-03-12"
 
 //--------------------
 // RESOURCE HANDLER
@@ -81,7 +81,6 @@ type server struct {
 	defaultResource string
 	domains         domainMapping
 	templateCache   *templateCache
-	logger		util.Logger
 }
 
 // The central server.
@@ -98,7 +97,6 @@ func lazyCreateServer() {
 			defaultResource: "default",
 			domains:         make(domainMapping),
 			templateCache:   newTemplateCache(),
-			logger:		 util.NewDefaultLogger("web"),
 		}
 	}
 }
@@ -139,11 +137,11 @@ func handleFunc(rw http.ResponseWriter, r *http.Request) {
 	if ctx.Domain == srv.defaultDomain && ctx.Resource == srv.defaultResource {
 		// No default handler registered.
 		msg := fmt.Sprintf("domain '%v' and resource '%v' not found!", ctx.Domain, ctx.Resource)
-		srv.logger.Errorf(msg)
+		applog.Errorf(msg)
 		http.Error(ctx.ResponseWriter, msg, http.StatusNotFound)
 	} else {
 		// Redirect to default handler.
-		srv.logger.Infof("domain '%v' and resource '%v' not found, redirecting to default", ctx.Domain, ctx.Resource)
+		applog.Infof("domain '%v' and resource '%v' not found, redirecting to default", ctx.Domain, ctx.Resource)
 		ctx.Redirect(srv.defaultDomain, srv.defaultResource, "")
 	}
 }
@@ -155,12 +153,12 @@ func dispatch(ctx *Context, h ResourceHandler) bool {
 		if err := recover(); err != nil {
 			// Shit happens! TODO: Better error handling.
 			msg := fmt.Sprintf("internal server error: '%v' in context: '%v'", err, ctx)
-			srv.logger.Criticalf(msg)
+			applog.Criticalf(msg)
 			http.Error(ctx.ResponseWriter, msg, http.StatusInternalServerError)
 		}
 	}()
 
-	srv.logger.Infof("dispatching %s", ctx)
+	applog.Infof("dispatching %s", ctx)
 	switch ctx.Request.Method {
 	case "GET":
 		return h.Get(ctx)
@@ -177,7 +175,7 @@ func dispatch(ctx *Context, h ResourceHandler) bool {
 			return dh.Delete(ctx)
 		}
 	}
-	srv.logger.Errorf("method not allowed: %s", ctx)
+	applog.Errorf("method not allowed: %s", ctx)
 	http.Error(ctx.ResponseWriter, "405 method not allowed", http.StatusMethodNotAllowed)
 	return false
 }
@@ -248,11 +246,6 @@ func LoadAndParseTemplate(templateId, filename, contentType string) {
 func BasePath() string {
 	lazyCreateServer()
 	return srv.basePath
-}
-
-// SetLogger sets a new logger.
-func SetLogger(l util.Logger) {
-	srv.logger = l
 }
 
 // EOF

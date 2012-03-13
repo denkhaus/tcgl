@@ -12,6 +12,8 @@ package web
 //--------------------
 
 import (
+	"code.google.com/p/tcgl/applog"
+	"code.google.com/p/tcgl/asserts"
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
@@ -19,7 +21,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
@@ -115,13 +116,13 @@ func (th *TestHandler) Get(ctx *Context) bool {
 	}
 	switch {
 	case ctx.AcceptsXML():
-		ctx.Debugf("get XML")
+		applog.Debugf("get XML")
 		ctx.RenderTemplate("test:context:xml", data)
 	case ctx.AcceptsJSON():
-		ctx.Debugf("get JSON")
+		applog.Debugf("get JSON")
 		ctx.MarshalJSON(data, true)
 	default:
-		ctx.Debugf("get HTML")
+		applog.Debugf("get HTML")
 		ctx.RenderTemplate("test:context:html", data)
 	}
 	return true
@@ -158,80 +159,53 @@ func (th *TestHandler) Delete(ctx *Context) bool {
 
 // Test the GET command with an XML result.
 func TestGetXML(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
 	// Prepare the server.
 	AddResourceHandler("test", "getxml", NewTestHandler())
 	ts := startTestServer()
 	// Now the request.
 	body, err := localDo("GET", ts, "/test/getxml/4711", Hdr{"Accept": "application/xml"}, nil)
-	if err != nil {
-		t.Fatalf("XML get error: %v", err)
-	}
-	xml := string(body)
-	if !strings.Contains(xml, "<resourceId>4711</resourceId>") {
-		t.Fatalf("XML contains error: %v", xml)
-	}
+	assert.Nil(err, "Local XML GET.")
+	assert.Containment(string(body), "<resourceId>4711</resourceId>", "XML result.")
 }
 
 // Test the GET command with a JSON result.
 func TestGetJSON(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
 	// Prepare the server.
 	AddResourceHandler("test", "getjson", NewTestHandler())
 	ts := startTestServer()
 	// Now the request.
 	body, err := localDo("GET", ts, "/test/getjson/4711", Hdr{"Accept": "application/json"}, nil)
-	if err != nil {
-		t.Fatalf("JSON get error: %v", err)
-	}
+	assert.Nil(err, "Local JSON GET.")
 	data := map[string]interface{}{}
 	err = json.Unmarshal(body, &data)
-	if err != nil {
-		t.Fatalf("JSON unmarshal error: %v", err)
-	}
-	if data["resourceId"] != "4711" {
-		t.Fatalf("JSON contains error: %s / %v", body, data)
-	}
+	assert.Nil(err, "Unmarshal of the JSON data.")
+	assert.Equal(data["resourceId"], "4711", "Unmarshaled JSON result.")
 }
 
 // Test the PUT command with a JSON payload and result.
 func TestPutJSON(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
 	// Prepare the server.
 	AddResourceHandler("test", "putjson", NewTestHandler())
 	ts := startTestServer()
 	// Now the request.
-	inData := map[string]interface{}{"alpha": "foo", "beta": 4711, "gamma": true}
+	inData := map[string]interface{}{"alpha": "foo", "beta": 4711.0, "gamma": true}
 	b, _ := json.Marshal(inData)
 	body, err := localDo("PUT", ts, "/test/putjson/4711", Hdr{"Content-Type": "application/json", "Accept": "application/json"}, b)
-	if err != nil {
-		t.Fatalf("JSON local put error: %v", err)
-	}
+	assert.Nil(err, "Local JSON PUT.")
 	outData := map[string]interface{}{}
 	err = json.Unmarshal(body, &outData)
-	if err != nil {
-		t.Fatalf("JSON unmarshal error: %v (%s)", err, body)
-	}
+	assert.Nil(err, "Unmarshal of the JSON data.")
 	for k, v := range inData {
-		ov := outData[k]
-		switch tov := ov.(type) {
-		case string:
-			if tov != v {
-				t.Fatalf("JSON compare string error: %s = %v (%v)", k, v, tov)
-			}
-		case float64:
-			if tov != float64(v.(int)) {
-				t.Fatalf("JSON compare number error: %s = %v (%v)", k, v, tov)
-			}
-		case bool:
-			if tov != v {
-				t.Fatalf("JSON compare bool error: %s = %v (%v)", k, v, tov)
-			}
-		default:
-			t.Fatalf("JSON invalid type error: %s is %T, has to be %T", k, v, tov)
-		}
+		assert.Equal(outData[k], v, "JSON value")
 	}
 }
 
 // Test the PUT command with a GOB payload and result.
 func TestPutGob(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
 	// Prepare the server.
 	AddResourceHandler("test", "putgob", NewTestHandler())
 	ts := startTestServer()
@@ -239,52 +213,38 @@ func TestPutGob(t *testing.T) {
 	inData := TestData{"test", 4711}
 	b := new(bytes.Buffer)
 	err := gob.NewEncoder(b).Encode(inData)
-	if err != nil {
-		t.Fatalf("GOB encode error: %v", err)
-	}
+	assert.Nil(err, "GOB encode.")
 	body, err := localDo("POST", ts, "/test/putgob", Hdr{"Content-Type": "application/vnd.tideland.rwf"}, b.Bytes())
-	if err != nil {
-		t.Fatalf("GOB local post error: %v", err)
-	}
+	assert.Nil(err, "Local GOB POST.")
 	var outData TestData
 	err = gob.NewDecoder(bytes.NewBuffer(body)).Decode(&outData)
-	if err != nil {
-		t.Fatalf("GOB decode error: %v", err)
-	}
-	if outData.Id != "test" || outData.Count != 4711 {
-		t.Fatalf("GOB contains error: %s", outData)
-	}
+	assert.Nil(err, "GOB decode.")
+	assert.Equal(outData.Id, "test", "GOB decoded 'id'.")
+	assert.Equal(outData.Count, int64(4711), "GOB decoded 'count'.")
 }
 
 // Test the redirection to default.
 func TestRedirectDefault(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
 	// Prepare the server.
 	AddResourceHandler("default", "default", NewTestHandler())
 	ts := startTestServer()
 	// Now the request.
 	body, err := localDo("GET", ts, "/x/y", Hdr{}, nil)
-	if err != nil {
-		t.Fatalf("Redirect get error: %v", err)
-	}
-	xml := string(body)
-	if !strings.Contains(xml, "<dd>default</dd>") {
-		t.Fatalf("Redirect contains error: %v", xml)
-	}
+	assert.Nil(err, "Local unknown GET for redirect.")
+	assert.Containment(string(body), "<dd>default</dd>", "XML result.")
 }
 
 // Test the wrapper handler.
 func TestWrapperHandler(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
 	// Prepare the server.
 	AddResourceHandler("test", "wrapper", NewWrapperHandler(http.NotFound))
 	ts := startTestServer()
 	// Now the request.
 	body, err := localDo("GET", ts, "/test/wrapper", Hdr{}, nil)
-	if err != nil {
-		t.Fatalf("Wrapper get error: %v", err)
-	}
-	if string(body) != "404 page not found\n" {
-		t.Fatalf("Wrapper content error: '%s'", body)
-	}
+	assert.Nil(err, "Local wrapper GET.")
+	assert.Equal(string(body), "404 page not found\n", "Wrapper result.")
 }
 
 // EOF
