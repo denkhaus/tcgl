@@ -12,16 +12,12 @@ package redis
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/util"
+	"code.google.com/p/tcgl/identifier"
+	"code.google.com/p/tcgl/monitoring"
 	"fmt"
+	"sync"
 	"time"
 )
-
-//--------------------
-// CONST
-//--------------------
-
-const RELEASE = "Tideland Common Go Library - Redis - Release 2012-01-30"
 
 //--------------------
 // CONFIGURATION
@@ -29,11 +25,18 @@ const RELEASE = "Tideland Common Go Library - Redis - Release 2012-01-30"
 
 // Configuration of a database client.
 type Configuration struct {
-	Address  string
-	Timeout  time.Duration
-	Database int
-	Auth     string
-	PoolSize int
+	Address     string
+	Timeout     time.Duration
+	Database    int
+	Auth        string
+	PoolSize    int
+	LogCommands bool
+}
+
+// String returns the configured address and
+// database as string.
+func (c *Configuration) String() string {
+	return fmt.Sprintf("%s/%d", c.Address, c.Database)
 }
 
 //--------------------
@@ -42,10 +45,11 @@ type Configuration struct {
 
 // RedisDatabase manages the access to one database.
 type RedisDatabase struct {
+	mutex         sync.Mutex
 	configuration *Configuration
 	pool          chan *unifiedRequestProtocol
 	poolUsage     int
-	logger        util.Logger
+	dbClosed      bool
 }
 
 // NewRedisDatabase create a new accessor.
@@ -55,7 +59,6 @@ func NewRedisDatabase(c Configuration) *RedisDatabase {
 	rd := &RedisDatabase{
 		configuration: &c,
 		pool:          make(chan *unifiedRequestProtocol, c.PoolSize),
-		logger:        util.NewDefaultLogger(fmt.Sprintf("redis:%s:%d", c.Address, c.Database)),
 	}
 	// Init pool with nils.
 	for i := 0; i < c.PoolSize; i++ {
@@ -64,25 +67,26 @@ func NewRedisDatabase(c Configuration) *RedisDatabase {
 	return rd
 }
 
-// Command performs a command.
+// Command performs a Redis command.
 func (rd *RedisDatabase) Command(cmd string, args ...interface{}) *ResultSet {
-	// Create result set.
 	rs := newResultSet(cmd)
-	// URP handling.
+	if rd.dbClosed {
+		rs.err = &DatabaseClosedError{rd}
+		return rs
+	}
+
 	urp, err := rd.pullURP()
-	defer func() {
-		rd.pushURP(urp)
-	}()
+	defer rd.pushURP(urp)
+
 	if err != nil {
 		rs.err = err
 		return rs
 	}
-	// Now do it.
 	urp.command(rs, false, cmd, args...)
 	return rs
 }
 
-// AsyncCommand perform a command asynchronously.
+// AsyncCommand performs a Redis command asynchronously.
 func (rd *RedisDatabase) AsyncCommand(cmd string, args ...interface{}) *Future {
 	fut := newFuture()
 	go func() {
@@ -91,27 +95,28 @@ func (rd *RedisDatabase) AsyncCommand(cmd string, args ...interface{}) *Future {
 	return fut
 }
 
-// Perform a multi command.
+// MultiCommand executes a function for the performing
+// of multiple commands in one call.
 func (rd *RedisDatabase) MultiCommand(f func(*MultiCommand)) *ResultSet {
 	// Create result set.
 	rs := newResultSet("multi")
 	rs.resultSets = []*ResultSet{}
-	// URP handling.
+
 	urp, err := rd.pullURP()
-	defer func() {
-		rd.pushURP(urp)
-	}()
+	defer rd.pushURP(urp)
+
 	if err != nil {
 		rs.err = err
 		return rs
 	}
-	// Now do it.
+
 	mc := newMultiCommand(rs, urp)
 	mc.process(f)
 	return rs
 }
 
-// Perform an asynchronous multi command.
+// AsyncMultiCommand executes a function for the performing
+// of multiple commands in one call asynchronously.
 func (rd *RedisDatabase) AsyncMultiCommand(f func(*MultiCommand)) *Future {
 	fut := newFuture()
 	go func() {
@@ -132,17 +137,27 @@ func (rd *RedisDatabase) Subscribe(channel ...string) (*Subscription, error) {
 }
 
 // Publish a message to a channel.
-func (rd *RedisDatabase) Publish(channel string, message interface{}) int {
+func (rd *RedisDatabase) Publish(channel string, message interface{}) (int, error) {
 	rs := rd.Command("publish", channel, message)
-	return int(rs.Value().Int64())
+	if !rs.IsOK() {
+		return 0, rs.Error()
+	}
+	v, err := rs.Value().Int64()
+	if err != nil {
+		return 0, err
+	}
+	return int(v), nil
 }
 
-// Pull an URP from the pool, with lazy init.
+// pullURP retrieves a unified request protocol managing the
+// communication with Redis out of the pool.
 func (rd *RedisDatabase) pullURP() (*unifiedRequestProtocol, error) {
+	rd.mutex.Lock()
+	defer rd.mutex.Unlock()
+
 	urp := <-rd.pool
-	// Lazy init of an URP.
 	if urp == nil {
-		// Create a new URP.
+		// Lazy creation of a new URP.
 		var err error
 		urp, err = newUnifiedRequestProtocol(rd)
 		if err != nil {
@@ -150,28 +165,35 @@ func (rd *RedisDatabase) pullURP() (*unifiedRequestProtocol, error) {
 		}
 	}
 	rd.poolUsage++
+	monitoring.SetVariable(identifier.Identifier("redis", "pool", "usage"), int64(rd.poolUsage))
 	return urp, nil
 }
 
-// Push an URP to the pool.
+// pushURP returns a unified request protocol back to the pool.
 func (rd *RedisDatabase) pushURP(urp *unifiedRequestProtocol) {
+	rd.mutex.Lock()
+	defer rd.mutex.Unlock()
+
+	rd.pool <- urp
 	if urp != nil {
 		rd.poolUsage--
 	}
-	rd.pool <- urp
+	monitoring.SetVariable(identifier.Identifier("redis", "pool", "usage"), int64(rd.poolUsage))
 }
 
 //--------------------
 // MULTI COMMAND
 //--------------------
 
+// MultiCommand enables the user to perform multiple commands
+// in one call.
 type MultiCommand struct {
 	urp       *unifiedRequestProtocol
 	rs        *ResultSet
 	discarded bool
 }
 
-// Create a new multi command helper.
+// newMultiCommand creates a new multi command helper.
 func newMultiCommand(rs *ResultSet, urp *unifiedRequestProtocol) *MultiCommand {
 	return &MultiCommand{
 		urp: urp,
@@ -179,7 +201,7 @@ func newMultiCommand(rs *ResultSet, urp *unifiedRequestProtocol) *MultiCommand {
 	}
 }
 
-// Process the transaction block.
+// process executes the multi command function.
 func (mc *MultiCommand) process(f func(*MultiCommand)) {
 	// Send the multi command.
 	mc.urp.command(mc.rs, false, "multi")
@@ -190,7 +212,7 @@ func (mc *MultiCommand) process(f func(*MultiCommand)) {
 	}
 }
 
-// Execute a command inside the transaction. It will
+// Command performs a command inside the transaction. It will
 // be queued.
 func (mc *MultiCommand) Command(cmd string, args ...interface{}) {
 	rs := newResultSet(cmd)
@@ -198,7 +220,7 @@ func (mc *MultiCommand) Command(cmd string, args ...interface{}) {
 	mc.urp.command(rs, false, cmd, args...)
 }
 
-// Discard the queued commands.
+// Discard throws all so far queued commands away.
 func (mc *MultiCommand) Discard() {
 	// Send the discard command and empty result sets.
 	mc.urp.command(mc.rs, false, "discard")
@@ -211,7 +233,8 @@ func (mc *MultiCommand) Discard() {
 // HELPERS
 //--------------------
 
-// Check the configuration.
+// checkConfiguration ensures that unset configuration
+// parameters get default values.
 func checkConfiguration(c *Configuration) {
 	if c.Address == "" {
 		// Default is localhost and default port.
@@ -219,7 +242,7 @@ func checkConfiguration(c *Configuration) {
 	}
 	if c.Timeout <= 0 {
 		// Timeout for connection dialing is 5 seconds.
-		c.Timeout = 5000
+		c.Timeout = 5 * time.Second
 	}
 	if c.Database < 0 {
 		// Shouldn't happen.

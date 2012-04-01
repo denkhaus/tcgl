@@ -27,7 +27,7 @@ func TestDispatch(t *testing.T) {
 	result, err := Dispatch(&on, "String")
 	assert.Nil(err, "Dispatch String() should return no error")
 	assert.Equal(result, "on", "Active switch as string is 'on'")
-	result, err =  Dispatch(&on, "Set", false)
+	result, err = Dispatch(&on, "Set", false)
 	assert.Nil(err, "Dispatch Set() should return no error")
 	assert.Equal(on.String(), "off", "Inactive switch as string is 'off'")
 }

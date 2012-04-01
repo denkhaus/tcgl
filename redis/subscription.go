@@ -8,24 +8,19 @@
 package redis
 
 //--------------------
-// IMPORTS
-//--------------------
-
-import "runtime"
-
-//--------------------
 // SUBSCRIPTION VALUE
 //--------------------
 
-// The subscription value is a result value
-// plus channel pattern and channel.
+// SubscriptionValue is a result value plus
+// channel pattern and channel.
 type SubscriptionValue struct {
 	Value
 	ChannelPattern string
 	Channel        string
 }
 
-// Create a new subscription value.
+// newSubscriptionValue creates a new subscription value
+// based on the raw data.
 func newSubscriptionValue(data [][]byte) *SubscriptionValue {
 	switch len(data) {
 	case 3:
@@ -49,69 +44,62 @@ func newSubscriptionValue(data [][]byte) *SubscriptionValue {
 // SUBSCRIPTION
 //--------------------
 
-// The subscription to a Redis channel.
+// Subscription manages a subscription one or more channels in Redis.
 type Subscription struct {
-	urp                   *unifiedRequestProtocol
-	error                 error
-	channelCount          int
-	SubscriptionValueChan chan *SubscriptionValue
+	urp          *unifiedRequestProtocol
+	error        error
+	channelCount int
+	valueChan    chan *SubscriptionValue
 }
 
-// Create a new subscription.
+// newSubscription creates a new subscription.
 func newSubscription(urp *unifiedRequestProtocol, channels ...string) *Subscription {
 	sub := &Subscription{
 		urp: urp,
-		SubscriptionValueChan: make(chan *SubscriptionValue, 10),
+		valueChan: make(chan *SubscriptionValue, 10),
 	}
-
-	runtime.SetFinalizer(sub, (*Subscription).Stop)
-
-	// Subscribe to the channels.
 	sub.channelCount = sub.urp.subscribe(channels...)
-
 	go sub.backend()
-
 	return sub
 }
 
-// Subscribe to channels.
+// Subscribe adds one or more channels to the subscription.
 func (s *Subscription) Subscribe(channels ...string) int {
 	s.channelCount = s.urp.subscribe(channels...)
-
 	return s.channelCount
 }
 
-// Unsubscribe from channels.
+// Unsubscribe removes one or more channels from the subscription.
 func (s *Subscription) Unsubscribe(channels ...string) int {
 	s.channelCount = s.urp.unsubscribe(channels...)
-
 	return s.channelCount
 }
 
-// Get the number of subscribed channels.
+// ChannelCount returns the number of subscribed channels.
 func (s *Subscription) ChannelCount() int {
 	return s.channelCount
 }
 
-// Close the subscription.
-func (s *Subscription) Stop() {
-	runtime.SetFinalizer(s, nil)
-
-	s.urp.stop()
-
-	close(s.SubscriptionValueChan)
+// Values returns a channel emitting the subscription valies.
+func (s *Subscription) Values() <-chan *SubscriptionValue {
+	return s.valueChan
 }
 
-// Backend of the subscription.
+// Stop ends the subscription..
+func (s *Subscription) Stop() {
+	s.urp.stop()
+	close(s.valueChan)
+}
+
+// backend is the serving goroutine for the subscription.
 func (s *Subscription) backend() {
 	for epd := range s.urp.publishedDataChan {
 		// Received a published data, republish
 		// as subscription value.
 		sv := newSubscriptionValue(epd.data)
-
 		// Send the subscription value.
 		select {
-		case s.SubscriptionValueChan <- sv:
+		case s.valueChan <- sv:
 			// OK.
 		default:
 			// Not sent!

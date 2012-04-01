@@ -16,12 +16,6 @@ import (
 )
 
 //--------------------
-// CONST
-//--------------------
-
-const RELEASE = "Tideland Common Go Library - Time - Release 2012-02-24"
-
-//--------------------
 // RANGES
 //--------------------
 

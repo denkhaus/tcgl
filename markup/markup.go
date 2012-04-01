@@ -22,12 +22,6 @@ import (
 )
 
 //--------------------
-// CONST
-//--------------------
-
-const RELEASE = "Tideland Common Go Library - Simple Markup Language - Release 2012-02-16"
-
-//--------------------
 // PROCESSOR
 //--------------------
 

@@ -17,14 +17,53 @@ import (
 )
 
 //--------------------
-// EVENTS
+// TICKER
 //--------------------
+
+// ticker provides periodic events raised at a defined id.
+type ticker struct {
+	env *Environment
+	id string
+	raiseId string
+	period time.Duration
+	stopChan chan bool
+}
+
+// startTicker starts a new ticker in the background.
+func startTicker(env *Environment, id, raiseId string, period time.Duration) *ticker {
+	t := &ticker{env, id, raiseId, period, make(chan bool)}
+	go t.backend()
+	return t
+}
+
+// stop lets the backend goroutine stop working.
+func (t *ticker) stop() {
+	t.stopChan <- true
+}
+
+// backend is the goroutine running the ticker.
+func (t *ticker) backend() {
+	for {
+		select {
+		case <-time.After(t.period):
+			t.env.Raise(t.raiseId, NewTickerEvent(t.id))
+		case <-t.stopChan:
+			return
+		}
+	}
+}
 
 // TickerEvent signals a tick to ticker subscribers.
 type TickerEvent struct {
 	id      string
 	time    time.Time
 	context *Context
+}
+
+// NewTickerEvent creates a new ticker event instance with a 
+// given id and the current time.
+func NewTickerEvent(id string) *TickerEvent {
+	return &TickerEvent{id, time.Now(), nil}
 }
 
 // Topic returns the topic of the event, here "ticker([id])".

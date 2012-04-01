@@ -14,6 +14,8 @@ package applog_test
 import (
 	"code.google.com/p/tcgl/applog"
 	"code.google.com/p/tcgl/asserts"
+	"log"
+	"os"
 	"testing"
 )
 
@@ -62,6 +64,20 @@ func TestWarningAndAbove(t *testing.T) {
 	applog.Criticalf("Critical.")
 }
 
+// Test logging with the go logger.
+func TestGoLogger(t *testing.T) {
+	log.SetOutput(os.Stdout)
+	
+	applog.SetLevel(applog.LevelDebug)
+	applog.SetLogger(applog.GoLogger{})
+
+	applog.Debugf("Debug.")
+	applog.Infof("Info.")
+	applog.Warningf("Warning.")
+	applog.Errorf("Error.")
+	applog.Criticalf("Critical.")
+}
+
 // Test logging with an own logger.
 func TestOwnLogger(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
@@ -87,21 +103,21 @@ type testLogger struct {
 	logs []string
 }
 
-func (tl *testLogger) Debug(msg string) {
-	tl.logs = append(tl.logs, msg)
+func (tl *testLogger) Debug(info, msg string) {
+	tl.logs = append(tl.logs, info + " " + msg)
 }
 
-func (tl *testLogger) Info(msg string) {
-	tl.logs = append(tl.logs, msg)
+func (tl *testLogger) Info(info, msg string) {
+	tl.logs = append(tl.logs, info + " " + msg)
 }
-func (tl *testLogger) Warning(msg string) {
-	tl.logs = append(tl.logs, msg)
+func (tl *testLogger) Warning(info, msg string) {
+	tl.logs = append(tl.logs, info + " " + msg)
 }
-func (tl *testLogger) Error(msg string) {
-	tl.logs = append(tl.logs, msg)
+func (tl *testLogger) Error(info, msg string) {
+	tl.logs = append(tl.logs, info + " " + msg)
 }
-func (tl *testLogger) Critical(msg string) {
-	tl.logs = append(tl.logs, msg)
+func (tl *testLogger) Critical(info, msg string) {
+	tl.logs = append(tl.logs, info + " " + msg)
 }
 
 // EOF

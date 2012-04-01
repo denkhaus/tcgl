@@ -12,9 +12,7 @@ package redis
 //--------------------
 
 import (
-	"errors"
 	"fmt"
-
 	"strconv"
 	"strings"
 )
@@ -32,47 +30,48 @@ func (v Value) String() string {
 }
 
 // Bool return the value as bool.
-func (v Value) Bool() bool {
-	if b, err := strconv.ParseBool(v.String()); err == nil {
-		return b
+func (v Value) Bool() (bool, error) {
+	b, err := strconv.ParseBool(v.String())
+	if err != nil {
+		return false, &InvalidTypeError{"bool", v.String(), err}
 	}
-	return false
+	return b, nil
 }
 
 // Int returns the value as int.
-func (v Value) Int() int {
-	if i, err := strconv.Atoi(v.String()); err == nil {
-		return i
+func (v Value) Int() (int, error) {
+	i, err := strconv.Atoi(v.String())
+	if err != nil {
+		return 0, &InvalidTypeError{"int", v.String(), err}
 	}
-
-	return 0
+	return i, nil
 }
 
 // Int64 returns the value as int64.
-func (v Value) Int64() int64 {
-	if i, err := strconv.ParseInt(v.String(), 10, 64); err == nil {
-		return i
+func (v Value) Int64() (int64, error) {
+	i, err := strconv.ParseInt(v.String(), 10, 64)
+	if err != nil {
+		return 0, &InvalidTypeError{"int64", v.String(), err}
 	}
-
-	return 0
+	return i, nil
 }
 
 // Uint64 returns the value as uint64.
-func (v Value) Uint64() uint64 {
-	if i, err := strconv.ParseUint(v.String(), 10, 64); err == nil {
-		return i
+func (v Value) Uint64() (uint64, error) {
+	i, err := strconv.ParseUint(v.String(), 10, 64)
+	if err != nil {
+		return 0, &InvalidTypeError{"uint64", v.String(), err}
 	}
-
-	return 0
+	return i, nil
 }
 
 // Float64 returns the value as float64.
-func (v Value) Float64() float64 {
-	if f, err := strconv.ParseFloat(v.String(), 64); err == nil {
-		return f
+func (v Value) Float64() (float64, error) {
+	f, err := strconv.ParseFloat(v.String(), 64)
+	if err != nil {
+		return 0.0, &InvalidTypeError{"float64", v.String(), err}
 	}
-
-	return 0.0
+	return f, nil
 }
 
 // Bytes returns the value as byte slice.
@@ -90,15 +89,12 @@ func (v Value) StringSlice() []string {
 func (v Value) StringMap() map[string]string {
 	tmp := v.StringSlice()
 	m := make(map[string]string, len(tmp))
-
 	for _, s := range tmp {
 		kv := strings.Split(s, ":")
-
 		if len(kv) > 1 {
 			m[strings.TrimSpace(kv[0])] = strings.TrimSpace(kv[1])
 		}
 	}
-
 	return m
 }
 
@@ -107,7 +103,6 @@ func (v Value) Unpack() Value {
 	if len(v) > 2 && v[0] == '[' && v[len(v)-1] == ']' {
 		return Value(v[1 : len(v)-1])
 	}
-
 	return v
 }
 
@@ -151,57 +146,51 @@ func (h Hash) Set(k string, v interface{}) {
 }
 
 // String returns the value of a key as string.
-func (h Hash) String(k string) string {
+func (h Hash) String(k string) (string, error) {
 	if v, ok := h[k]; ok {
-		return v.String()
+		return v.String(), nil
 	}
-
-	return ""
+	return "", &InvalidKeyError{k}
 }
 
 // Bool returns the value of a key as bool.
-func (h Hash) Bool(k string) bool {
+func (h Hash) Bool(k string) (bool, error) {
 	if v, ok := h[k]; ok {
 		return v.Bool()
 	}
-
-	return false
+	return false, &InvalidKeyError{k}
 }
 
 // Int returns the value of a key as int.
-func (h Hash) Int(k string) int {
+func (h Hash) Int(k string) (int, error) {
 	if v, ok := h[k]; ok {
 		return v.Int()
 	}
-
-	return 0
+	return 0, &InvalidKeyError{k}
 }
 
 // Int64 returns the value of a key as int64.
-func (h Hash) Int64(k string) int64 {
+func (h Hash) Int64(k string) (int64, error) {
 	if v, ok := h[k]; ok {
 		return v.Int64()
 	}
-
-	return 0
+	return 0, &InvalidKeyError{k}
 }
 
 // Uint64 returns the value of a key as uint64.
-func (h Hash) Uint64(k string) uint64 {
+func (h Hash) Uint64(k string) (uint64, error) {
 	if v, ok := h[k]; ok {
 		return v.Uint64()
 	}
-
-	return 0
+	return 0, &InvalidKeyError{k}
 }
 
 // Float64 returns the value of a key as float64.
-func (h Hash) Float64(k string) float64 {
+func (h Hash) Float64(k string) (float64, error) {
 	if v, ok := h[k]; ok {
 		return v.Float64()
 	}
-
-	return 0.0
+	return 0.0, &InvalidKeyError{k}
 }
 
 // Bytes returns the value of a key as byte slice.
@@ -209,7 +198,6 @@ func (h Hash) Bytes(k string) []byte {
 	if v, ok := h[k]; ok {
 		return v.Bytes()
 	}
-
 	return []byte{}
 }
 
@@ -218,7 +206,6 @@ func (h Hash) StringSlice(k string) []string {
 	if v, ok := h[k]; ok {
 		return v.StringSlice()
 	}
-
 	return []string{}
 }
 
@@ -227,7 +214,6 @@ func (h Hash) StringMap(k string) map[string]string {
 	if v, ok := h[k]; ok {
 		return v.StringMap()
 	}
-
 	return map[string]string{}
 }
 
@@ -247,7 +233,7 @@ type ResultSet struct {
 func newResultSet(cmd string) *ResultSet {
 	return &ResultSet{
 		cmd: cmd,
-		err: errors.New("illegal terminated command"),
+		err: &InvalidTerminationError{},
 	}
 }
 
@@ -303,32 +289,27 @@ func (rs *ResultSet) Values() []Value {
 	if rs.values == nil {
 		return nil
 	}
-
 	vs := make([]Value, len(rs.values))
-
 	copy(vs, rs.values)
-
 	return vs
 }
 
 // UnpackedValues returns all values unpacked as slice.
 func (rs *ResultSet) UnpackedValues() []Value {
 	vs := rs.Values()
-
 	for i, v := range vs {
 		vs[i] = v.Unpack()
 	}
-
 	return vs
 }
 
 // ValueAsInt returns the first value as bool.
-func (rs *ResultSet) ValueAsBool() bool {
+func (rs *ResultSet) ValueAsBool() (bool, error) {
 	return rs.Value().Bool()
 }
 
 // ValueAsInt returns the first value as int.
-func (rs *ResultSet) ValueAsInt() int {
+func (rs *ResultSet) ValueAsInt() (int, error) {
 	return rs.Value().Int()
 }
 
@@ -358,31 +339,25 @@ func (rs *ResultSet) ValuesDo(f func(int, Value)) {
 // is a slice of values returned by the functions.
 func (rs *ResultSet) ValuesMap(f func(Value) interface{}) []interface{} {
 	result := make([]interface{}, len(rs.values))
-
 	for idx, v := range rs.values {
 		result[idx] = f(v)
 	}
-
 	return result
 }
 
 // Hash returns the values of the result set as hash.
 func (rs *ResultSet) Hash() Hash {
 	var key string
-
 	result := make(Hash)
 	set := false
-
 	for _, v := range rs.values {
 		if set {
 			// Write every second value.
 			result.Set(key, v.Bytes())
-
 			set = false
 		} else {
 			// First value is always a key.
 			key = v.String()
-
 			set = true
 		}
 	}
@@ -402,7 +377,6 @@ func (rs *ResultSet) ResultSetCount() int {
 	if rs.resultSets == nil {
 		return 0
 	}
-
 	return len(rs.resultSets)
 }
 
@@ -410,12 +384,9 @@ func (rs *ResultSet) ResultSetCount() int {
 func (rs *ResultSet) ResultSetAt(idx int) *ResultSet {
 	if idx < 0 || idx >= len(rs.resultSets) {
 		rs := newResultSet("none")
-
-		rs.err = errors.New("illegal result set index")
-
+		rs.err = &InvalidIndexError{len(rs.resultSets), idx}
 		return rs
 	}
-
 	return rs.resultSets[idx]
 }
 
@@ -432,11 +403,9 @@ func (rs *ResultSet) ResultSetsDo(f func(*ResultSet)) {
 // is a slice of values returned by the functions.
 func (rs *ResultSet) ResultSetsMap(f func(*ResultSet) interface{}) []interface{} {
 	result := make([]interface{}, len(rs.resultSets))
-
 	for idx, rs := range rs.resultSets {
 		result[idx] = f(rs)
 	}
-
 	return result
 }
 
@@ -449,13 +418,11 @@ func (rs *ResultSet) Error() error {
 // String returns the result set as a string.
 func (rs *ResultSet) String() string {
 	r := fmt.Sprintf("C(%v) V(%v) E(%v)", rs.cmd, rs.values, rs.err)
-
 	if rs.IsMulti() {
 		rs.ResultSetsDo(func(each *ResultSet) {
 			r += "\n- " + each.String()
 		})
 	}
-
 	return r
 }
 
@@ -482,9 +449,7 @@ func (f *Future) setResultSet(rs *ResultSet) {
 // ResultSet returns the result set in the moment it is available.
 func (f *Future) ResultSet() (rs *ResultSet) {
 	rs = <-f.rsChan
-
 	f.rsChan <- rs
-
 	return
 }
 

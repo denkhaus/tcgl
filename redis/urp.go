@@ -13,6 +13,7 @@ package redis
 
 import (
 	"bufio"
+	"code.google.com/p/tcgl/applog"
 	"code.google.com/p/tcgl/identifier"
 	"code.google.com/p/tcgl/monitoring"
 	"errors"
@@ -27,7 +28,7 @@ import (
 // MISC
 //--------------------
 
-// Envelope type for commands.
+// envCommand is the envelope for almost all commands.
 type envCommand struct {
 	rs       *ResultSet
 	multi    bool
@@ -36,26 +37,26 @@ type envCommand struct {
 	doneChan chan bool
 }
 
-// Envelope type for subscriptions.
+// envSubscription is the envelope for subscriptions.
 type envSubscription struct {
 	in        bool
 	channels  []string
 	countChan chan int
 }
 
-// Envelope type for read data.
+// envData is the envelope for data read from the database.
 type envData struct {
 	length int
 	data   []byte
 	err    error
 }
 
-// Helper for debugging.
+// String returns the data in a more human readable way.
 func (ed *envData) String() string {
-	return fmt.Sprintf("ED(%v / %s / %v)", ed.length, ed.data, ed.err)
+	return fmt.Sprintf("DATA(%v / %s / %v)", ed.length, ed.data, ed.err)
 }
 
-// Envelope type for published data.
+// envPublishedData is the envelope for published data.
 type envPublishedData struct {
 	data [][]byte
 	err  error
@@ -65,7 +66,7 @@ type envPublishedData struct {
 // UNIFIED REQUEST PROTOCOL
 //--------------------
 
-// Redis unified request protocol type.
+// unifiedRequestProtocol implements the Redis unified request protocol URP.
 type unifiedRequestProtocol struct {
 	database          *RedisDatabase
 	conn              net.Conn
@@ -78,12 +79,12 @@ type unifiedRequestProtocol struct {
 	stopChan          chan bool
 }
 
-// Create a new protocol.
+// newUnifiedRequestProtocol creates a new protocol.
 func newUnifiedRequestProtocol(rd *RedisDatabase) (*unifiedRequestProtocol, error) {
 	// Establish the connection.
-	conn, err := net.DialTimeout("tcp", rd.configuration.Address, rd.configuration.Timeout*time.Millisecond)
+	conn, err := net.DialTimeout("tcp", rd.configuration.Address, rd.configuration.Timeout)
 	if err != nil {
-		return nil, err
+		return nil, &ConnectionError{err}
 	}
 	// Create the URP.
 	urp := &unifiedRequestProtocol{
@@ -121,7 +122,7 @@ func newUnifiedRequestProtocol(rd *RedisDatabase) (*unifiedRequestProtocol, erro
 	return urp, nil
 }
 
-// Execute a command.
+// command performs a Redis command.
 func (urp *unifiedRequestProtocol) command(rs *ResultSet, multi bool, command string, args ...interface{}) {
 	m := monitoring.BeginMeasuring(identifier.Identifier("redis", "command", command))
 	doneChan := make(chan bool)
@@ -130,26 +131,26 @@ func (urp *unifiedRequestProtocol) command(rs *ResultSet, multi bool, command st
 	m.EndMeasuring()
 }
 
-// Send a subscription request.
+// subscribe subscribes to one or more channels.
 func (urp *unifiedRequestProtocol) subscribe(channels ...string) int {
 	countChan := make(chan int)
 	urp.subscriptionChan <- &envSubscription{true, channels, countChan}
 	return <-countChan
 }
 
-// Send an unsubscription request.
+// unsubscribe unsubscribes from one or more channels.
 func (urp *unifiedRequestProtocol) unsubscribe(channels ...string) int {
 	countChan := make(chan int)
 	urp.subscriptionChan <- &envSubscription{false, channels, countChan}
 	return <-countChan
 }
 
-// Stop the protocol.
+// stop tells the protocol to end its work.
 func (urp *unifiedRequestProtocol) stop() {
 	urp.stopChan <- true
 }
 
-// Goroutine for receiving data from the TCP connection.
+// receiver is the goroutine for the receiving of the results in the background.
 func (urp *unifiedRequestProtocol) receiver() {
 	var ed *envData
 	for {
@@ -207,12 +208,11 @@ func (urp *unifiedRequestProtocol) receiver() {
 	}
 }
 
-// Goroutine as backend for the protocol.
+// backend is the backend goroutine for the protocol.
 func (urp *unifiedRequestProtocol) backend() {
 	// Prepare cleanup.
 	defer func() {
 		urp.conn.Close()
-
 		urp.conn = nil
 	}()
 	// Receive commands and data.
@@ -235,7 +235,7 @@ func (urp *unifiedRequestProtocol) backend() {
 	}
 }
 
-// Handle a sent command.
+// handleCommand executes a command and returns the reply.
 func (urp *unifiedRequestProtocol) handleCommand(ec *envCommand) {
 	if err := urp.writeRequest(ec.command, ec.args); err == nil {
 		// Receive and return reply.
@@ -252,20 +252,23 @@ func (urp *unifiedRequestProtocol) handleCommand(ec *envCommand) {
 func (urp *unifiedRequestProtocol) logCommand(ec *envCommand) {
 	var log string
 	if ec.multi {
-		log = "multi "	
+		log = "multi "
 	}
 	log += "command " + ec.command
 	for _, arg := range ec.args {
 		log = fmt.Sprintf("%s %v", log, arg)
 	}
+	// Positive commands only if wanted, errors always.
 	if ec.rs.IsOK() {
-		urp.database.logger.Infof("%s OK", log)
+		if urp.database.configuration.LogCommands {
+			applog.Infof("%s OK", log)
+		}
 	} else {
-		urp.database.logger.Warningf("%s ERROR %v", log, ec.rs.err)		
+		applog.Errorf("%s ERROR %v", log, ec.rs.err)
 	}
 }
 
-// Handle a subscription.
+// handleSubscription exucutes subscribe and unsubscribe commands.
 func (urp *unifiedRequestProtocol) handleSubscription(es *envSubscription) {
 	// Prepare command.
 	var command string
@@ -295,10 +298,11 @@ func (urp *unifiedRequestProtocol) handleSubscription(es *envSubscription) {
 	// Get the number of subscribed channels.
 	lastResultSet := rs.ResultSetAt(channelLen - 1)
 	lastResultValue := lastResultSet.ValueAt(lastResultSet.ValueCount() - 1)
-	es.countChan <- int(lastResultValue.Int64())
+	v, _ := lastResultValue.Int64()
+	es.countChan <- int(v)
 }
 
-// Handle published data.
+// handlePublishing handles the publishing of data to a channel.
 func (urp *unifiedRequestProtocol) handlePublishing(ed *envData) {
 	// Continue according to the initial data.
 	switch {
@@ -325,7 +329,7 @@ func (urp *unifiedRequestProtocol) handlePublishing(ed *envData) {
 	}
 }
 
-// Write a request.
+// writeRequest send the request to the server.
 func (urp *unifiedRequestProtocol) writeRequest(cmd string, args []interface{}) error {
 	// Calculate number of data.
 	dataNum := 1
@@ -339,15 +343,13 @@ func (urp *unifiedRequestProtocol) writeRequest(cmd string, args []interface{}) 
 			dataNum++
 		}
 	}
-	// Write number of following data.
+	// Write the number, the command and its arguments.
 	if err := urp.writeDataNumber(dataNum); err != nil {
 		return err
 	}
-	// Write command.
 	if err := urp.writeData([]byte(cmd)); err != nil {
 		return err
 	}
-	// Write arguments.
 	for _, arg := range args {
 		if err := urp.writeArgument(arg); err != nil {
 			return err
@@ -356,13 +358,13 @@ func (urp *unifiedRequestProtocol) writeRequest(cmd string, args []interface{}) 
 	return nil
 }
 
-// Write the number of arguments.
+// writeDataNumber sends the number of data elements to the server.
 func (urp *unifiedRequestProtocol) writeDataNumber(dataLen int) error {
 	urp.writer.Write([]byte(fmt.Sprintf("*%d\r\n", dataLen)))
 	return urp.writer.Flush()
 }
 
-// Write data.
+// writeData sends a data element to the server.
 func (urp *unifiedRequestProtocol) writeData(data []byte) error {
 	// Write the len of the data.
 	b := []byte(fmt.Sprintf("$%d\r\n", len(data)))
@@ -377,13 +379,11 @@ func (urp *unifiedRequestProtocol) writeData(data []byte) error {
 	return urp.writer.Flush()
 }
 
-// Write a request argument.
+// writeArgument sends an argument to the server.
 func (urp *unifiedRequestProtocol) writeArgument(arg interface{}) error {
 	// Little helper for converting and writing.
 	convertAndWrite := func(a interface{}) error {
-		// Convert data.
 		data := valueToBytes(a)
-		// Now write data.
 		if err := urp.writeData(data); err != nil {
 			return err
 		}
@@ -419,14 +419,12 @@ func (urp *unifiedRequestProtocol) writeArgument(arg interface{}) error {
 	return nil
 }
 
-// Receive a reply.
+// receiveReply gets the reply from the server.
 func (urp *unifiedRequestProtocol) receiveReply(rs *ResultSet, multi bool) {
-	// Read initial data.
+	start := time.Now()
 	ed := <-urp.dataChan
-	// Continue according to the initial data.
 	switch {
 	case ed.err != nil:
-		// Error.
 		rs.err = ed.err
 	case ed.data != nil:
 		// Single result.
@@ -452,15 +450,15 @@ func (urp *unifiedRequestProtocol) receiveReply(rs *ResultSet, multi bool) {
 			}
 		}
 	case ed.length == -1:
-		// Timeout.
-		rs.err = errors.New("redis: timeout")
+		rs.err = &TimeoutError{time.Now().Sub(start)}
 	default:
-		// Invalid reply.
-		rs.err = errors.New("redis: invalid reply")
+		rs.err = &InvalidReplyError{}
 	}
 }
 
-// Prepare the channels.
+// prepareChannels converts the channels from strings to interfaces which is
+// needed for proper writing. It also checks if one of the channels contains a
+// pattern.
 func (urp *unifiedRequestProtocol) prepareChannels(channels []string) ([]interface{}, bool) {
 	pattern := false
 	cis := make([]interface{}, len(channels))

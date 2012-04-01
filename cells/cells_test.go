@@ -407,6 +407,47 @@ func TestCounter(t *testing.T) {
 	assert.Nil(err, "No error during shutdown.")
 }
 
+// TestTicker tests the management of periodic events.
+func TestTicker(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
+
+	cf := func(e Event) []string {
+		return []string{e.Topic()}
+	}
+	env := NewEnvironment("test")
+	env.AddCell("counter", NewCounterBehavior(cf), 1)
+	env.AddTicker("alpha", "counter", 5 * time.Millisecond)
+	env.AddTicker("beta", "counter", 2 * time.Millisecond)
+
+	// Test standard ticking.
+	time.Sleep(500 * time.Millisecond)
+
+	b, _ := env.Cell("counter")
+	cb := b.(*CounterBehavior)
+	va := float64(cb.Counter("ticker(alpha)"))
+	vb := float64(cb.Counter("ticker(beta)"))
+
+	assert.About(va, 100.0, 10.0, "Ticker Alpha should emit about 100 events during this time.")
+	assert.About(vb, 250.0, 50.0, "Ticker Beta should emit about 250 events during this time.")
+
+	// Test double add.
+	err := env.AddTicker("alpha", "counter", 5 * time.Millisecond)
+	assert.ErrorMatch(err, `ticker with id "alpha" already added`, "Can't add a ticker with an existing id.")
+
+	// Test remove non-existing ticker.
+	err = env.RemoveTicker("not-there")
+	assert.ErrorMatch(err, `ticker with id "not-there" does not exist`, "Can't remove a not existing ticker.")
+
+	// Test remove ticker.
+	err = env.RemoveTicker("alpha")
+	assert.Nil(err, "Ticker removal should work.")
+	err = env.AddTicker("alpha", "counter", 5 * time.Millisecond)
+	assert.Nil(err, "And so also a new adding of a now free ticker.")
+
+	err = env.Shutdown()
+	assert.Nil(err, "No error during shutdown.")
+}
+
 // TestMonitoring just prints the measuring values.
 func TestMonitoring(t *testing.T) {
 	monitoring.MeasuringPointsPrintAll()

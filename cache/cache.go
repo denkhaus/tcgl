@@ -20,12 +20,6 @@ import (
 // CONST
 //--------------------
 
-const RELEASE = "Tideland Common Go Library - Cache - Release 2012-02-15"
-
-//--------------------
-// CONST
-//--------------------
-
 // Signals to stop or restart a cached value.
 const (
 	sigStop    = true

@@ -166,7 +166,7 @@ func TestGetXML(t *testing.T) {
 	// Now the request.
 	body, err := localDo("GET", ts, "/test/getxml/4711", Hdr{"Accept": "application/xml"}, nil)
 	assert.Nil(err, "Local XML GET.")
-	assert.Containment(string(body), "<resourceId>4711</resourceId>", "XML result.")
+	assert.Substring(string(body), "<resourceId>4711</resourceId>", "XML result.")
 }
 
 // Test the GET command with a JSON result.
@@ -232,7 +232,7 @@ func TestRedirectDefault(t *testing.T) {
 	// Now the request.
 	body, err := localDo("GET", ts, "/x/y", Hdr{}, nil)
 	assert.Nil(err, "Local unknown GET for redirect.")
-	assert.Containment(string(body), "<dd>default</dd>", "XML result.")
+	assert.Substring(string(body), "<dd>default</dd>", "XML result.")
 }
 
 // Test the wrapper handler.
@@ -245,6 +245,6 @@ func TestWrapperHandler(t *testing.T) {
 	body, err := localDo("GET", ts, "/test/wrapper", Hdr{}, nil)
 	assert.Nil(err, "Local wrapper GET.")
 	assert.Equal(string(body), "404 page not found\n", "Wrapper result.")
-}
+	}
 
 // EOF

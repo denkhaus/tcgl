@@ -151,17 +151,17 @@ func TestAssertDifferent(t *testing.T) {
 	}
 }
 
-// TestAssertContainment tests the Match() assertion.
-func TestAssertContainment(t *testing.T) {
+// TestAssertSubstring tests the Substring() assertion.
+func TestAssertSubstring(t *testing.T) {
 	a := createValueAsserts(t)
 
-	a.Containment("this is a test", "is a", "should not fail")
-	a.Containment("this is 1 test", "test", "should not fail")
-	if a.Containment("this is a test", "foo", "should fail and be logged") {
-		t.Errorf("Containment() returned true")
+	a.Substring("this is a test", "is a", "should not fail")
+	a.Substring("this is 1 test", "test", "should not fail")
+	if a.Substring("this is a test", "foo", "should fail and be logged") {
+		t.Errorf("Substring() returned true")
 	}
-	if a.Containment("this is a test", "this   is   a   test", "should fail and be logged") {
-		t.Errorf("Containment() returned true")
+	if a.Substring("this is a test", "this   is   a   test", "should fail and be logged") {
+		t.Errorf("Substring() returned true")
 	}
 }
 
@@ -191,19 +191,19 @@ func TestAssertErrorMatch(t *testing.T) {
 	}
 }
 
-// TestAssertImplements tests the Implements() assertion.
-func TestAssertImplements(t *testing.T) {
+// TestAssertImplementor tests the Implementor() assertion.
+func TestAssertImplementor(t *testing.T) {
 	a := createTypeAsserts(t)
 
 	var err error
 	var w io.Writer
 
-	a.Implements(errors.New("error test"), &err, "should not fail")
-	if a.Implements("string test", &err, "should fail and be logged") {
-		t.Errorf("Implements() returned true")
+	a.Implementor(errors.New("error test"), &err, "should not fail")
+	if a.Implementor("string test", &err, "should fail and be logged") {
+		t.Errorf("Implementor() returned true")
 	}
-	if a.Implements(errors.New("error test"), &w, "should fail and be logged") {
-		t.Errorf("Implements() returned true")
+	if a.Implementor(errors.New("error test"), &w, "should fail and be logged") {
+		t.Errorf("Implementor() returned true")
 	}
 }
 

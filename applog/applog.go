@@ -14,18 +14,13 @@ package applog
 import (
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path"
 	"runtime"
 	"strings"
 	"time"
 )
-
-//--------------------
-// CONST
-//--------------------
-
-const RELEASE = "Tideland Common Go Library - Application Log - Release 2012-03-05"
 
 //--------------------
 // LOG LEVEL
@@ -62,15 +57,15 @@ func SetLevel(l int) {
 // Logger is the interface for different logger implementations.
 type Logger interface {
 	// Debug logs a message at debug level.
-	Debug(msg string)
+	Debug(info, msg string)
 	// Info logs a message at info level.
-	Info(msg string)
+	Info(info, msg string)
 	// Warning logs a message at warning level.
-	Warning(msg string)
+	Warning(info, msg string)
 	// Error logs a message at error level.
-	Error(msg string)
+	Error(info, msg string)
 	// Critical logs a message at critical level.
-	Critical(msg string)
+	Critical(info, msg string)
 }
 
 // logger references the used application logger.
@@ -80,6 +75,9 @@ var logger Logger = NewStandardLogger(os.Stdout)
 func SetLogger(l Logger) {
 	logger = l
 }
+
+// timeFormat controls how the timestamp of the standard logger is printed.
+const timeFormat = "2006-01-02 15:04:05 Z07:00"
 
 // StandardLogger is a simple logger writing to the given writer. It
 // doesn't handle the levels differently.
@@ -93,33 +91,86 @@ func NewStandardLogger(out io.Writer) Logger {
 }
 
 // Debug logs a message at debug level.
-func (sl StandardLogger) Debug(msg string) {
+func (sl StandardLogger) Debug(info, msg string) {
+	io.WriteString(sl.out, "[D] ")
+	io.WriteString(sl.out, time.Now().Format(timeFormat))
+	io.WriteString(sl.out, " ")
+	io.WriteString(sl.out, info)
+	io.WriteString(sl.out, " ")
 	io.WriteString(sl.out, msg)
 	io.WriteString(sl.out, "\n")
 }
 
 // Info logs a message at info level.
-func (sl StandardLogger) Info(msg string) {
+func (sl StandardLogger) Info(info, msg string) {
+	io.WriteString(sl.out, "[I] ")
+	io.WriteString(sl.out, time.Now().Format(timeFormat))
+	io.WriteString(sl.out, " ")
+	io.WriteString(sl.out, info)
+	io.WriteString(sl.out, " ")
 	io.WriteString(sl.out, msg)
 	io.WriteString(sl.out, "\n")
 }
 
 // Warning logs a message at warning level.
-func (sl StandardLogger) Warning(msg string) {
+func (sl StandardLogger) Warning(info, msg string) {
+	io.WriteString(sl.out, "[W] ")
+	io.WriteString(sl.out, time.Now().Format(timeFormat))
+	io.WriteString(sl.out, " ")
+	io.WriteString(sl.out, info)
+	io.WriteString(sl.out, " ")
 	io.WriteString(sl.out, msg)
 	io.WriteString(sl.out, "\n")
 }
 
 // Error logs a message at error level.
-func (sl StandardLogger) Error(msg string) {
+func (sl StandardLogger) Error(info, msg string) {
+	io.WriteString(sl.out, "[E] ")
+	io.WriteString(sl.out, time.Now().Format(timeFormat))
+	io.WriteString(sl.out, " ")
+	io.WriteString(sl.out, info)
+	io.WriteString(sl.out, " ")
 	io.WriteString(sl.out, msg)
 	io.WriteString(sl.out, "\n")
 }
 
 // Critical logs a message at critical level.
-func (sl StandardLogger) Critical(msg string) {
+func (sl StandardLogger) Critical(info, msg string) {
+	io.WriteString(sl.out, "[C] ")
+	io.WriteString(sl.out, time.Now().Format(timeFormat))
+	io.WriteString(sl.out, " ")
+	io.WriteString(sl.out, info)
+	io.WriteString(sl.out, " ")
 	io.WriteString(sl.out, msg)
 	io.WriteString(sl.out, "\n")
+}
+
+// GoLogger just uses the standard go log package.
+type GoLogger struct {}
+
+// Debug logs a message at debug level.
+func (gl GoLogger) Debug(info, msg string) {
+	log.Println("[D]", info, msg)
+}
+
+// Info logs a message at info level.
+func (gl GoLogger) Info(info, msg string) {
+	log.Println("[I]", info, msg)
+}
+
+// Warning logs a message at warning level.
+func (gl GoLogger) Warning(info, msg string) {
+	log.Println("[W]", info, msg)
+}
+
+// Error logs a message at error level.
+func (gl GoLogger) Error(info, msg string) {
+	log.Println("[E]", info, msg)
+}
+
+// Critical logs a message at critical level.
+func (gl GoLogger) Critical(info, msg string) {
+	log.Println("[C]", info, msg)
 }
 
 //--------------------
@@ -131,9 +182,8 @@ func Debugf(format string, args ...interface{}) {
 	if level <= LevelDebug {
 		ci := retrieveCallInfo()
 		fi := fmt.Sprintf(format, args...)
-		msg := fmt.Sprintf("[D] %s %s", ci.verboseFormat(), fi)
 
-		logger.Debug(msg)
+		logger.Debug(ci.verboseFormat(), fi)
 	}
 }
 
@@ -142,9 +192,8 @@ func Infof(format string, args ...interface{}) {
 	if level <= LevelInfo {
 		ci := retrieveCallInfo()
 		fi := fmt.Sprintf(format, args...)
-		msg := fmt.Sprintf("[I] %s %s", ci.shortFormat(), fi)
 
-		logger.Info(msg)
+		logger.Info(ci.shortFormat(), fi)
 	}
 }
 
@@ -153,9 +202,8 @@ func Warningf(format string, args ...interface{}) {
 	if level <= LevelWarning {
 		ci := retrieveCallInfo()
 		fi := fmt.Sprintf(format, args...)
-		msg := fmt.Sprintf("[W] %s %s", ci.shortFormat(), fi)
 
-		logger.Warning(msg)
+		logger.Warning(ci.shortFormat(), fi)
 	}
 }
 
@@ -164,9 +212,8 @@ func Errorf(format string, args ...interface{}) {
 	if level <= LevelError {
 		ci := retrieveCallInfo()
 		fi := fmt.Sprintf(format, args...)
-		msg := fmt.Sprintf("[E] %s %s", ci.shortFormat(), fi)
 
-		logger.Error(msg)
+		logger.Error(ci.shortFormat(), fi)
 	}
 }
 
@@ -174,22 +221,17 @@ func Errorf(format string, args ...interface{}) {
 func Criticalf(format string, args ...interface{}) {
 	ci := retrieveCallInfo()
 	fi := fmt.Sprintf(format, args...)
-	msg := fmt.Sprintf("[C] %s %s", ci.verboseFormat(), fi)
 
-	logger.Critical(msg)
+	logger.Critical(ci.verboseFormat(), fi)
 }
 
 //--------------------
 // HELPER
 //--------------------
 
-// timeFormat controls how the timestamp is printed.
-const timeFormat = "2006-01-02 15:04:05 Z07:00"
-
-// callInfo bundles the info about the call environment, date and time
+// callInfo bundles the info about the call environment
 // when a logging statement occured.
 type callInfo struct {
-	now         time.Time
 	packageName string
 	fileName    string
 	funcName    string
@@ -198,12 +240,12 @@ type callInfo struct {
 
 // shortFormat returns a string representation in a short variant.
 func (ci *callInfo) shortFormat() string {
-	return fmt.Sprintf("%s [%s]", ci.now.Format(timeFormat), ci.packageName)
+	return fmt.Sprintf("[%s]", ci.packageName)
 }
 
 // verboseFormat returns a string representation in a more verbose variant.
 func (ci *callInfo) verboseFormat() string {
-	return fmt.Sprintf("%s [%s] (%s:%s:%d)", ci.now.Format(timeFormat), ci.packageName, ci.fileName, ci.funcName, ci.line)
+	return fmt.Sprintf("[%s] (%s:%s:%d)", ci.packageName, ci.fileName, ci.funcName, ci.line)
 }
 
 // retrieveCallInfo 
@@ -223,7 +265,6 @@ func retrieveCallInfo() *callInfo {
 	}
 
 	return &callInfo{
-		now:         time.Now(),
 		packageName: packageName,
 		fileName:    fileName,
 		funcName:    funcName,

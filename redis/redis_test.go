@@ -12,9 +12,8 @@ package redis
 //--------------------
 
 import (
+	"code.google.com/p/tcgl/asserts"
 	"code.google.com/p/tcgl/monitoring"
-	"code.google.com/p/tcgl/util"
-	"math/rand"
 	"testing"
 	"time"
 )
@@ -46,495 +45,318 @@ func (htt *hashableTestType) GetHash() Hash {
 
 // SetHash sets the fields from a hash.
 func (htt *hashableTestType) SetHash(h Hash) {
-	htt.a = h.String("hashable:field:a")
-	htt.b = h.Int64("hashable:field:b")
-	htt.c = h.Bool("hashable:field:c")
-	htt.d = h.Float64("hashable:field:d")
+	htt.a, _ = h.String("hashable:field:a")
+	htt.b, _ = h.Int64("hashable:field:b")
+	htt.c, _ = h.Bool("hashable:field:c")
+	htt.d, _ = h.Float64("hashable:field:d")
 }
 
 //--------------------
 // TESTS
 //--------------------
 
-// Test connection commands.
 func TestConnection(t *testing.T) {
-	util.Debugf("Connection ...")
-
+	assert := asserts.NewTestingAsserts(t, true)
 	rd := NewRedisDatabase(Configuration{})
+
 	// Connection commands.
-	if rd.Command("echo", "Hello, World!").ValueAsString() != "Hello, World!" {
-		t.Errorf("Invalid echo result, expected 'Hello, World!'!")
-	}
-	if rd.Command("ping").ValueAsString() != "PONG" {
-		t.Errorf("Can't ping the server!")
-	}
+	assert.Equal(rd.Command("echo", "Hello, World!").ValueAsString(), "Hello, World!", "Echo of a string.")
+	assert.Equal(rd.Command("ping").ValueAsString(), "PONG", "Playing ping pong.")
 }
 
-// Test simple value commands.
-func TestSimpleValue(t *testing.T) {
-	util.Debugf("Simple value ...")
-
+func TestSimpleSingleValue(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
 	rd := NewRedisDatabase(Configuration{})
 
-	rd.Command("del", "simple:string")
-	rd.Command("del", "simple:int")
-	rd.Command("del", "simple:float64")
-	rd.Command("del", "simple:bytes")
-	rd.Command("del", "simple:bits")
-	rd.Command("del", "simple:nx")
-	rd.Command("del", "simple:range")
-
-	// Simple value commands.
-	rd.Command("set", "simple:string", "Hello,")
-	rd.Command("append", "simple:string", " World")
-
-	if rd.Command("get", "simple:string").ValueAsString() != "Hello, World" {
-		t.Errorf("Invalid append result for simple:string, expected 'Hello, World'!")
-	}
-
-	// ---
-	rd.Command("set", "simple:int", 10)
-
-	if v := rd.Command("incr", "simple:int").ValueAsInt(); v != 11 {
-		t.Errorf("Got '%v', expected '11'!", v)
-	}
-
-	// ---
-	rd.Command("set", "simple:float64", 47.11)
-
-	if v := rd.Command("get", "simple:float64").Value().Float64(); v != float64(47.11) {
-		t.Errorf("Got '%v', expected '47.11' as float64!", v)
-	}
-
-	// ---
-	bytesIn := make([]byte, 128)
-
-	for i := 0; i < 128; i++ {
-		bytesIn[i] = byte(rand.Intn(255))
-	}
-
-	rd.Command("set", "simple:bytes", bytesIn)
-
-	bytesOut := rd.Command("get", "simple:bytes").Value().Bytes()
-
-	for i, b := range bytesOut {
-		if bytesIn[i] != b {
-			t.Errorf("Got '%v', expected '%v'!", b, bytesIn[i])
-		}
-	}
-
-	// ---
-	rd.Command("setbit", "simple:bits", 0, 1)
-	rd.Command("setbit", "simple:bits", 1, 0)
-
-	if !rd.Command("getbit", "simple:bits", 0).ValueAsBool() || rd.Command("getbit", "simple:bits", 1).ValueAsBool() {
-		t.Errorf("Bit setting or getting went wrong!")
-		t.Errorf("Got '%v' for bit 0.", rd.Command("getbit", "simple:bits", 0).ValueAsBool())
-		t.Errorf("Got '%v' for bit 1.", rd.Command("getbit", "simple:bits", 1).ValueAsBool())
-	}
-
-	// ---
-	if rd.Command("get", "non:existing:key").IsOK() {
-		t.Errorf("Expected a failure for non-existing key!")
-	}
-
-	if rd.Command("exists", "non:existing:key").ValueAsBool() {
-		t.Errorf("Expected 'false' for non-existing key!")
-	}
-
-	// ---
-	if !rd.Command("setnx", "simple:nx", "Test").ValueAsBool() {
-		t.Errorf("Setting of not-existing key failed!")
-	}
-
-	if rd.Command("setnx", "simple:nx", "Test").ValueAsBool() {
-		t.Errorf("Overwriting of existing key!")
-	}
-
-	// ---
-	if rd.Command("setrange", "simple:range", 10, "Test").ValueAsInt() != 14 {
-		t.Errorf("Range setting has the wrong length!")
-	}
-
-	if rd.Command("getrange", "simple:range", 11, 12).ValueAsString() != "es" {
-		t.Errorf("Range getting has the wrong value!")
-	}
+	rs := rd.Command("del", "single-value")
+	assert.True(rs.IsOK(), "'del' is ok.")
+	rs = rd.Command("set", "single-value", "Hello, World!")
+	assert.True(rs.IsOK(), "'set' is ok.")
+	rs = rd.Command("get", "single-value")
+	assert.True(rs.IsOK(), "'get' is ok.")
+	assert.False(rs.IsMulti(), "'get' returned no multi-result-set.")
+	assert.Equal(rs.Command(), "get", "Command has been 'get'.")
+	assert.Equal(rs.ValueCount(), 1, "'get' returned one value.")
+	assert.Equal(rs.Value().String(), "Hello, World!", "'get' returned the right value.")
 }
 
-// Test multi-key commands.
-func TestMultiple(t *testing.T) {
-	util.Debugf("Multiple ...")
-
+func TestSimpleMultipleValues(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
 	rd := NewRedisDatabase(Configuration{})
 
-	// Set values first.
-	rd.Command("set", "multiple:a", "a")
-	rd.Command("set", "multiple:b", "b")
-	rd.Command("set", "multiple:c", "c")
+	rd.Command("del", "multiple-value:1")
+	rd.Command("del", "multiple-value:2")
+	rd.Command("del", "multiple-value:3")
+	rd.Command("del", "multiple-value:4")
+	rd.Command("del", "multiple-value:5")
 
-	if v := rd.Command("mget", "multiple:a", "multiple:b", "multiple:c"); v == nil {
-		t.Errorf("Multiple get has an error!")
-	}
+	rd.Command("set", "multiple-value:1", "one")
+	rd.Command("set", "multiple-value:2", "two")
+	rd.Command("set", "multiple-value:3", "three")
+	rd.Command("set", "multiple-value:4", "four")
+	rd.Command("set", "multiple-value:5", "five")
 
-	h := &hashableTestType{"multi", 4711, true, 3.141}
-
-	rd.Command("mset", h)
-
-	if v := rd.Command("mget", "hashable:field:a", "hashable:field:c").Values(); len(v) != 2 {
-		t.Errorf("Multiple get after hashable has wrong len '%v'!", len(v))
-	}
+	rs := rd.Command("mget", "multiple-value:1", "multiple-value:2", "multiple-value:3", "multiple-value:4", "multiple-value:5")
+	assert.True(rs.IsOK(), "'mget' is ok.")
+	assert.False(rs.IsMulti(), "'mget' returned no multi-result-set.")
+	assert.Equal(rs.Command(), "mget", "Command has been 'mget'.")
+	assert.Equal(rs.ValueCount(), 5, "'mget' returned five value.")
+	assert.Equal(rs.ValueAt(0).String(), "one", "'mget' returned the right first value.")	
+	assert.Equal(rs.ValueAt(1).String(), "two", "'mget' returned the right second value.")	
+	assert.Equal(rs.ValueAt(2).String(), "three", "'mget' returned the right third value.")	
+	assert.Equal(rs.ValueAt(3).String(), "four", "'mget' returned the right fourth value.")	
+	assert.Equal(rs.ValueAt(4).String(), "five", "'mget' returned the right fifth value.")	
 }
 
-// Test hash accessing.
 func TestHash(t *testing.T) {
-	util.Debugf("Hash ...")
-
+	assert := asserts.NewTestingAsserts(t, true)
 	rd := NewRedisDatabase(Configuration{})
 
-	// Single field values.
-	rd.Command("hset", "hash:bool", "true:1", 1)
-	rd.Command("hset", "hash:bool", "true:2", true)
-	rd.Command("hset", "hash:bool", "true:3", "T")
-	rd.Command("hset", "hash:bool", "false:1", 0)
-	rd.Command("hset", "hash:bool", "false:2", false)
-	rd.Command("hset", "hash:bool", "false:3", "FALSE")
+	rd.Command("del", "hash:manual")
+	rd.Command("del", "hash:hashable")
 
-	if !rd.Command("hget", "hash:bool", "true:1").ValueAsBool() {
-		t.Errorf("hash:bool true:1 is not true!")
-	}
+	// Manual hash usage.
+	rd.Command("hset", "hash:manual", "field:1", "one")
+	rd.Command("hset", "hash:manual", "field:2", "two")
 
-	if rd.Command("hget", "hash:bool", "false:2").ValueAsBool() {
-		t.Errorf("hash:bool false:2 is not false, it's '%v'!", rd.Command("hget", "hash:bool", "false:2").ValueAsString())
-	}
+	rs := rd.Command("hget", "hash:manual", "field:1")
+	assert.True(rs.IsOK(), "'hget' is ok.")
+	assert.Equal(rs.ValueCount(), 1, "'hget' returned one value.")
+	assert.Equal(rs.Value().String(), "one", "'hget' returned the right value.")
+	rs = rd.Command("hgetall", "hash:manual")
+	assert.True(rs.IsOK(), "'hgetall' is ok.")
+	assert.Equal(rs.ValueCount(), 4, "'hgetall' returned four values (fields and values).")
+	assert.Equal(rs.ValueAt(0).String(), "field:1", "'hgetall' returned the right first value.")	
+	assert.Equal(rs.ValueAt(1).String(), "one", "'hgetall' returned the right second value.")	
+	assert.Equal(rs.ValueAt(2).String(), "field:2", "'hgetall' returned the right third value.")	
+	assert.Equal(rs.ValueAt(3).String(), "two", "'hgetall' returned the right fourth value.")
 
-	// ---
-	ha := rd.Command("hgetall", "hash:bool").Hash()
+	// Use the Hash type and the Hashable interface.
+	h := rd.Command("hgetall", "hash:manual").Hash()
+	assert.Equal(h.Len(), 2, "Manual hash has the right len.")
+	v, err := h.String("field:1")
+	assert.Nil(err, "Reading 'field:1' is ok.")
+	assert.Equal(v, "one", "Hash field 'field:1' has right value.")
+	v, err = h.String("field:2")
+	assert.Nil(err, "Reading 'field:2' is ok.")
+	assert.Equal(v, "two", "Hash field 'field:2' has right value.")
+	v, err = h.String("field:not-existing")
+	assert.ErrorMatch(err, `redis: invalid key "field:not-existing"`, "Right error for not-existing field.")
 
-	if ha.Len() != 6 {
-		t.Errorf("Hash size of hash:bool is not 6, it's '%v'!", ha.Len())
-	}
+	htIn := hashableTestType{"foo \"bar\" yadda", 4711, true, 8.15}
+	rd.Command("hmset", "hash:hashable", htIn.GetHash())
+	rd.Command("hincrby", "hash:hashable", "hashable:field:b", 289)
 
-	if ha.Bool("false:3") {
-		t.Errorf("hash:bool false:3 is not false, it's '%v'!", ha.String("false:3"))
-	}
-
-	// ---
-	hb := hashableTestType{"foo \"bar\" yadda", 4711, true, 8.15}
-
-	rd.Command("hmset", "hashable", hb.GetHash())
-	rd.Command("hincrby", "hashable", "hashable:field:b", 289)
-
-	hb = hashableTestType{}
-
-	hb.SetHash(rd.Command("hgetall", "hashable").Hash())
-
-	if hb.a != "foo \"bar\" yadda" || hb.b != 5000 || !hb.c || hb.d != 8.15 {
-		t.Errorf("At leas one of the hashable fields is wrong! '%v'", hb)
-	}
+	htOut := hashableTestType{}
+	htOut.SetHash(rd.Command("hgetall", "hash:hashable").Hash())
+	assert.Equal(htOut.a, "foo \"bar\" yadda", "Hash field 'a' is ok.")
+	assert.Equal(htOut.b, int64(5000), "Hash field 'b' is ok.")
+	assert.True(htOut.c, "Hash field 'c' is ok.")
+	assert.Equal(htOut.d, 8.15, "Hash field 'd' is ok.")
 }
 
-// Test list commands.
-func TestList(t *testing.T) {
-	util.Debugf("List ...")
-
-	rd := NewRedisDatabase(Configuration{})
-
-	rd.Command("del", "list:a")
-	rd.Command("del", "list:b")
-	rd.Command("del", "list:c")
-
-	// Push values into list.
-	rd.Command("rpush", "list:a", "one")
-	rd.Command("rpush", "list:a", "two")
-	rd.Command("rpush", "list:a", "three")
-	rd.Command("rpush", "list:a", "four")
-	rd.Command("rpush", "list:a", "five")
-	rd.Command("rpush", "list:a", "six")
-	rd.Command("rpush", "list:a", "seven")
-	rd.Command("rpush", "list:a", "eight")
-	rd.Command("rpush", "list:a", "nine")
-
-	if l := rd.Command("llen", "list:a").ValueAsInt(); l != 9 {
-		t.Errorf("Length of list:a is not 9, it's '%v'!", l)
-	}
-
-	if v := rd.Command("lpop", "list:a").ValueAsString(); v != "one" {
-		t.Errorf("Left pop in list:a did not returned 'one', it returned '%v'!", v)
-	}
-
-	// ---
-	if vs := rd.Command("lrange", "list:a", 3, 6).Values(); vs != nil && vs[0].String() != "five" {
-		t.Errorf("Range '%v' is wrong!", vs)
-	}
-
-	rd.Command("ltrim", "list:a", 0, 3)
-
-	if l := rd.Command("llen", "list:a").ValueAsInt(); l != 4 {
-		t.Errorf("Trimming the list:a didn't worked!")
-	}
-
-	// ---
-	rd.Command("rpoplpush", "list:a", "list:b")
-
-	if rd.Command("lindex", "list:b", 4711).IsOK() {
-		t.Errorf("Oops, expected error for invalid list index!")
-	}
-
-	if v := rd.Command("lindex", "list:b", 0).ValueAsString(); v != "five" {
-		t.Errorf("Right pop left push didn't worked, value has the value '%v'!", v)
-	}
-
-	// ---
-	rd.Command("rpush", "list:c", 1)
-	rd.Command("rpush", "list:c", 2)
-	rd.Command("rpush", "list:c", 3)
-	rd.Command("rpush", "list:c", 4)
-	rd.Command("rpush", "list:c", 5)
-
-	if v := rd.Command("lpop", "list:c").ValueAsInt(); v != 1 {
-		t.Errorf("Value of list:c has the wrong value '%v'!", v)
-	}
-}
-
-// Test set commands.
-func TestSet(t *testing.T) {
-	util.Debugf("Set ...")
-
-	rd := NewRedisDatabase(Configuration{})
-
-	rd.Command("del", "set:a")
-	rd.Command("del", "set:b")
-
-	// Add values to the set.
-	rd.Command("sadd", "set:a", 1)
-	rd.Command("sadd", "set:a", 2)
-	rd.Command("sadd", "set:a", 3)
-	rd.Command("sadd", "set:a", 4)
-	rd.Command("sadd", "set:a", 5)
-	rd.Command("sadd", "set:a", 4)
-	rd.Command("sadd", "set:a", 3)
-
-	if c := rd.Command("scard", "set:a").ValueAsInt(); c != 5 {
-		t.Errorf("Set cardinality is not 5, it's '%v'!", c)
-	}
-
-	if rd.Command("sismember", "set:a", Pack(4)).ValueAsBool() {
-		t.Errorf("4 is not as expected member of the set!")
-	}
-}
-
-// Test asynchronous commands.
 func TestFuture(t *testing.T) {
-	util.Debugf("Future ...")
-
-	rd := NewRedisDatabase(Configuration{})
-	fut := rd.AsyncCommand("keys", "*")
-	rs := fut.ResultSet()
-
-	if !rs.IsOK() {
-		t.Errorf("Future result set is not ok! RS: %v", rs)
-	}
-
-	if rs.ValueCount() == 0 {
-		t.Errorf("Wrong number of values!")
-	}
-}
-
-// Test complex commands.
-func TestComplex(t *testing.T) {
-	util.Debugf("Complex ...")
-
-	rd := NewRedisDatabase(Configuration{})
-	rsA := rd.Command("info")
-
-	if rsA.Value().StringMap()["arch_bits"] != "64" {
-		t.Errorf("Invalid result, expected '64'!")
-	}
-
-	sliceIn := []string{"A", "B", "C", "D", "E"}
-
-	rd.Command("set", "complex:slice", sliceIn)
-
-	rsB := rd.Command("get", "complex:slice")
-	sliceOut := rsB.Value().StringSlice()
-
-	for i, s := range sliceOut {
-		if sliceIn[i] != s {
-			t.Errorf("Got '%v', expected '%v'!", s, sliceIn[i])
-		}
-	}
-
-	mapIn := map[string]string{
-		"A": "1",
-		"B": "2",
-		"C": "3",
-		"D": "4",
-		"E": "5",
-	}
-
-	rd.Command("set", "complex:map", mapIn)
-
-	rsC := rd.Command("get", "complex:map")
-	mapOut := rsC.Value().StringMap()
-
-	for k, v := range mapOut {
-		if mapIn[k] != v {
-			t.Errorf("Got '%v', expected '%v'!", v, mapIn[k])
-		}
-	}
-}
-
-// Test multi-value commands.
-func TestMulti(t *testing.T) {
-	util.Debugf("Multi ...")
-
+	assert := asserts.NewTestingAsserts(t, true)
 	rd := NewRedisDatabase(Configuration{})
 
-	rd.Command("sadd", "multi:set", "one")
-	rd.Command("sadd", "multi:set", "two")
-	rd.Command("sadd", "multi:set", "three")
+	rd.Command("del", "future")
 
-	rsA := rd.Command("smembers", "multi:set")
-
-	if rsA.ValueCount() != 3 {
-		t.Errorf("Got '%v', expected '3'!", rsA.ValueCount())
-	}
-
-	for i := 0; i < 100; i++ {
-		rd.Command("rpush", "multi:list", i)
-	}
+ 	fut := rd.AsyncCommand("rpush", "future", "one", "two", "three", "four", "five")
+ 	rs := fut.ResultSet()
+ 	assert.True(rs.IsOK(), "Future result is ok.")
+ 	v, err := rs.ValueAsInt()
+	assert.Nil(err, "Future value is an integer.")
+	assert.Equal(v, 5, "The returned future value is 5.")
 }
 
-// Test transactions.
-func TestTransactions(t *testing.T) {
-	util.Debugf("Transactions ...")
-
+func TestStringMap(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
 	rd := NewRedisDatabase(Configuration{})
-	rsA := rd.MultiCommand(func(mc *MultiCommand) {
-		mc.Command("set", "tx:a:string", "Hello, World!")
-		mc.Command("get", "tx:a:string")
-	})
 
-	if rsA.ResultSetAt(1).ValueAsString() != "Hello, World!" {
-		t.Errorf("Got '%v', expected 'Hello, World!'!", rsA.ResultSetAt(1).ValueAsString())
-	}
+	rd.Command("del", "string:map")
 
-	rsB := rd.MultiCommand(func(mc *MultiCommand) {
-		mc.Command("set", "tx:b:string", "Hello, World!")
-		mc.Command("get", "tx:b:string")
-		mc.Discard()
-		mc.Command("set", "tx:c:string", "Hello, Redis!")
-		mc.Command("get", "tx:c:string")
-	})
+ 	mapIn := map[string]string{
+ 		"A": "1",
+ 		"B": "2",
+ 		"C": "3",
+ 		"D": "4",
+ 		"E": "5",
+ 	}
+ 	rs := rd.Command("set", "string:map", mapIn)
+ 	assert.True(rs.IsOK(), "Setting a string map is ok.")
 
-	if rsB.ResultSetAt(1).ValueAsString() != "Hello, Redis!" {
-		t.Errorf("Got '%v', expected 'Hello, Redis!'!", rsB.ResultSetAt(1).ValueAsString())
-	}
+ 	rs = rd.Command("get", "string:map")
+ 	assert.True(rs.IsOK(), "Getting a string map is ok.")
+ 	mapOut := rs.Value().StringMap()
+ 	assert.Length(mapOut, 5, "Length of the retrieved string map is ok.")
+ 	assert.Equal(mapOut, mapIn, "Retrieval string map is ok.")
 }
 
-// Test pop.
-func TestPop(t *testing.T) {
-	util.Debugf("Pop ...")
-
-	fooPush := func(rd *RedisDatabase) {
-		time.Sleep(1e9)
-		rd.Command("lpush", "pop:first", "foo")
-	}
-
-	// Set A: no database timeout.
-	rdA := NewRedisDatabase(Configuration{})
-
-	go fooPush(rdA)
-
-	rsAA := rdA.Command("blpop", "pop:first", 5)
-
-	if kv := rsAA.KeyValue(); kv.Value.String() != "foo" {
-		t.Errorf("Got '%v', expected 'foo'!", kv.Value.String())
-	}
-
-	rsAB := rdA.Command("blpop", "pop:first", 1)
-
-	if rsAB.Error().Error() != "redis: timeout" {
-		t.Errorf("Got '%v', expected 'redis: timeout'!", rsAB.Error().Error())
-	}
-
-	// Set B: database with timeout.
-	rdB := NewRedisDatabase(Configuration{})
-
-	rsBA := rdB.Command("blpop", "pop:first", 5)
-
-	if rsBA.Error() == nil {
-		t.Errorf("Expected an error!")
-	}
-}
-
-// Test subscribe.
-func TestSubscribe(t *testing.T) {
-	util.Debugf("Subscribe ...")
+func TestStringSlice(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
 	rd := NewRedisDatabase(Configuration{})
-	sub, err := rd.Subscribe("subscribe:one", "subscribe:two")
-	if err != nil {
-		t.Errorf("Can't subscribe, error is '%v'!", err)
 
-		return
-	}
+	rd.Command("del", "string:slice")
+
+ 	sliceIn := []string{"A", "B", "C", "D", "E"}
+ 	rs := rd.Command("set", "string:slice", sliceIn)
+ 	assert.True(rs.IsOK(), "Setting a string slice is ok.")
+
+ 	rs = rd.Command("get", "string:slice")
+ 	assert.True(rs.IsOK(), "Getting a string slice is ok.")
+ 	sliceOut := rs.Value().StringSlice()
+ 	assert.Length(sliceOut, 5, "Length of the retrieved string slice is ok.")
+ 	assert.Equal(sliceOut, sliceIn, "Retrieval string slice is ok.")
+}
+
+func TestMultiCommand(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
+	rd := NewRedisDatabase(Configuration{})
+
+	rd.Command("del", "multi-command:1")
+	rd.Command("del", "multi-command:2")
+	rd.Command("del", "multi-command:3")
+	rd.Command("del", "multi-command:4")
+	rd.Command("del", "multi-command:5")
+
+ 	rs := rd.MultiCommand(func(mc *MultiCommand) {
+ 		mc.Command("set", "multi-command:1", "1")
+ 		mc.Command("set", "multi-command:1", "2")
+ 		mc.Discard()
+  		mc.Command("set", "multi-command:1", "one")
+ 		mc.Command("set", "multi-command:2", "two")
+ 		mc.Command("set", "multi-command:3", "three")
+ 		mc.Command("set", "multi-command:4", "four")
+ 		mc.Command("set", "multi-command:5", "five")
+
+  		mc.Command("get", "multi-command:3")
+ 	})
+ 	assert.True(rs.IsOK(), "Executing the multi-command has been ok.")
+ 	assert.Equal(rs.ResultSetCount(), 6, "Multi-command returned 6 result sets.")
+ 	assert.Equal(rs.ResultSetAt(5).ValueAsString(), "three", "Sixth result set contained right value 'three'.")
+}
+
+func TestBlockingPop(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
+	rd := NewRedisDatabase(Configuration{})
+
+	rd.Command("del", "queue")
+
 	go func() {
-		for sv := range sub.SubscriptionValueChan {
-			if sv == nil {
-				util.Debugf("Received nil!")
-			} else {
-				util.Debugf("Published '%v' Channel '%v' Pattern '%v'", sv, sv.Channel, sv.ChannelPattern)
-			}
+		for i := 0; i < 10; i++ {
+			time.Sleep(100 * time.Millisecond)
+			rs := rd.Command("lpush", "queue", i)
+			assert.True(rs.IsOK(), "'lpush' into queue has been ok.")
 		}
-		util.Debugf("Subscription stopped!")
 	}()
-	if rd.Publish("subscribe:one", "1 Alpha") != 1 {
-		t.Errorf("First publishing has illegal receiver count!")
+
+	for i := 0; i < 10; i++ {
+		rs := rd.Command("brpop", "queue", 5)
+		assert.True(rs.IsOK(), "'brpop' from queue has been ok.")
+		assert.Equal(rs.ValueAt(0).String(), "queue", "Right 'queue' has been returned.")
+		v, err := rs.ValueAt(1).Int()
+		assert.Nil(err, "No error retrieving the integer value.")
+		assert.Equal(v, i, "Popped value has been right.")
 	}
-	rd.Publish("subscribe:one", "1 Beta")
-	rd.Publish("subscribe:one", "1 Gamma")
-	rd.Publish("subscribe:two", "2 Alpha")
-	rd.Publish("subscribe:two", "2 Beta")
-	time.Sleep(1e8)
-	if cnt := sub.Unsubscribe("subscribe:two"); cnt != 1 {
-		t.Errorf("First unsubscribe has illegal channel (pattern) count '%v', expected '1'!", cnt)
+
+	rs := rd.Command("brpop", "queue", 1)
+	assert.ErrorMatch(rs.Error(), "redis: timeout after .*", "'brpop' timed out.")
+	assert.Assignable(rs.Error(), &TimeoutError{}, "Error has correct type.")
+}
+
+func TestPubSub(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
+	rd := NewRedisDatabase(Configuration{})
+
+	sub, err := rd.Subscribe("pubsub:1", "pubsub:2", "pubsub:3")
+	assert.Nil(err, "No error when subscribing.")
+	sub.Subscribe("pubsub:pattern:*")
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		rd.Publish("pubsub:1", "foo")
+		rd.Publish("pubsub:2", "bar")
+		rd.Publish("pubsub:3", "baz")
+		rd.Publish("pubsub:pattern:yadda", "yadda")
+	}()
+
+	// Check value receiving.
+	value := <-sub.Values()
+	assert.Equal(value.Channel, "pubsub:1", "First value channel has been ok.")
+	assert.Equal(value.Value.String(), "foo", "First value has been ok.")
+
+	value = <-sub.Values()
+	assert.Equal(value.Channel, "pubsub:2", "Second value channel has been ok.")
+	assert.Equal(value.Value.String(), "bar", "Second value has been ok.")
+
+	value = <-sub.Values()
+	assert.Equal(value.Channel, "pubsub:3", "Third value channel has been ok.")
+	assert.Equal(value.Value.String(), "baz", "Third value has been ok.")
+
+	value = <-sub.Values()
+	assert.Equal(value.Channel, "pubsub:pattern:yadda", "Fourth value channel has been ok.")
+	assert.Equal(value.ChannelPattern, "pubsub:pattern:*", "Fourth value channel pattern has been ok.")
+	assert.Equal(value.Value.String(), "yadda", "Fourth value has been ok.")
+
+	// Check no more receiving.
+	select {
+	case value = <-sub.Values():
+		assert.Nil(value, "Nothing expected here.")
+	case <-time.After(200 * time.Millisecond):
+		assert.True(true, "Timeout like expected.")
 	}
-	if cnt := sub.Unsubscribe("subscribe:one"); cnt != 0 {
-		t.Errorf("Second unsubscribe has illegal channel (pattern) count '%v', expected '0'!", cnt)
+
+	// Check unsubscribing.
+	sub.Unsubscribe("pubsub:3")
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		rd.Publish("pubsub:3", "foobar")
+	}()
+
+	select {
+	case value = <-sub.Values():
+		assert.Nil(value, "Nothing expected here.")
+	case <-time.After(200 * time.Millisecond):
+		assert.True(true, "Timeout like expected.")
 	}
-	if cnt := rd.Publish("subscribe:two", "2 Gamma"); cnt != 0 {
-		t.Errorf("Last publishing has illegal receiver count '%v', expected '0'!", cnt)
-	}
-	sub.Subscribe("subscribe:*")
-	rd.Publish("subscribe:one", "Pattern 1")
-	rd.Publish("subscribe:two", "Pattern 2")
-	time.Sleep(1e8)
+
+	// Check subscription stopping.
 	sub.Stop()
+
+	select {
+	case _, ok := <-sub.Values():
+		assert.False(ok, "Expected signalling of closed channel.")
+	case <-time.After(200 * time.Millisecond):
+		assert.False(true, "Timeout not expected here.")
+	}
 }
 
 // Test illegal databases.
 func TestIllegalDatabases(t *testing.T) {
-	util.Debugf("Illegal databases ...")
 	if testing.Short() {
 		return
 	}
+
 	// Test illegal database number.
-	rdA := NewRedisDatabase(Configuration{Database: 4711})
-	rsA := rdA.Command("ping")
-	if rsA.Error().Error() != "redis: invalid DB index" {
-		t.Errorf("Expected 'redis: invalid DB index', got '%v'!", rsA.Error().Error())
-	}
+	assert := asserts.NewTestingAsserts(t, true)
+	rd := NewRedisDatabase(Configuration{Database: 4711})
+
+	rs := rd.Command("ping")
+	assert.ErrorMatch(rs.Error(), "redis: invalid DB index", "Error message for invalid DB index is ok.")
+
 	// Test illegal network address.
-	rdB := NewRedisDatabase(Configuration{Address: "192.168.100.100:12345"})
-	rsB := rdB.Command("ping")
-	if rsB.IsOK() {
-		t.Errorf("Expected an error!'")
-	}
+	rd = NewRedisDatabase(Configuration{Address: "192.168.100.100:12345"})
+
+	rs = rd.Command("ping")
+	assert.ErrorMatch(rs.Error(), "redis: connection has a an error: dial tcp .*: i/o timeout", "Error message for invalid address is ok.")
+	assert.Assignable(rs.Error(), &ConnectionError{}, "Error has correct type.")
 }
 
 // Test measuring (pure output).
 func TestMeasuring(t *testing.T) {
 	monitoring.MeasuringPointsPrintAll()
+	monitoring.StaySetVariablesPrintAll()
 }
 
 // EOF

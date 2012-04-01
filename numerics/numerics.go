@@ -18,12 +18,6 @@ import (
 )
 
 //--------------------
-// CONST
-//--------------------
-
-const RELEASE = "Tideland Common Go Library - Numerics - Release 2012-02-17"
-
-//--------------------
 // POINT
 //--------------------
 

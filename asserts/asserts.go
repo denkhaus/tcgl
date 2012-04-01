@@ -23,12 +23,6 @@ import (
 )
 
 //--------------------
-// CONST
-//--------------------
-
-const RELEASE = "Tideland Common Go Library - Asserts - Release 2012-03-12"
-
-//--------------------
 // TEST
 //--------------------
 
@@ -44,10 +38,10 @@ const (
 	Equal
 	Different
 	About
-	Containment
+	Substring
 	Match
 	ErrorMatch
-	Implements
+	Implementor
 	Assignable
 	Unassignable
 	Empty
@@ -64,10 +58,10 @@ var testNames = []string{
 	Equal:        "equal",
 	Different:    "different",
 	About:	      "about",
-	Containment:  "containment",
+	Substring:    "substring",
 	Match:        "match",
 	ErrorMatch:   "error match",
-	Implements:   "implements",
+	Implementor:  "implementor",
 	Assignable:   "assignable",
 	Unassignable: "unassignable",
 	Empty:        "empty",
@@ -96,7 +90,7 @@ func panicFailFunc(test Test, obtained, expected interface{}, msg string) bool {
 	switch test {
 	case True, False, Nil, NotNil, Empty, NotEmpty:
 		obex = fmt.Sprintf("'%v'", obtained)
-	case Implements, Assignable, Unassignable:
+	case Implementor, Assignable, Unassignable:
 		obex = fmt.Sprintf("'%v' <> '%v'", ValueDescription(obtained), ValueDescription(expected))
 	default:
 		obex = fmt.Sprintf("'%v' <> '%v'", obtained, expected)
@@ -122,7 +116,7 @@ func generateTestingFailFunc(t *testing.T, fail bool) FailFunc {
 		switch test {
 		case True, False, Nil, NotNil, Empty, NotEmpty:
 			fmt.Fprintf(buffer, "Obtained: %v\n", obtained)
-		case Implements, Assignable, Unassignable:
+		case Implementor, Assignable, Unassignable:
 			fmt.Fprintf(buffer, "Obtained: %v\n", ValueDescription(obtained))
 			fmt.Fprintf(buffer, "Expected: %v\n", ValueDescription(expected))
 		default:
@@ -225,10 +219,10 @@ func (a Asserts) About(obtained, expected, extend float64, msg string) bool {
 	return true
 }
 
-// Containment tests if obtained contains a substring.
-func (a Asserts) Containment(obtained, substr, msg string) bool {
+// Substring tests if obtained contains a substring.
+func (a Asserts) Substring(obtained, substr, msg string) bool {
 	if !strings.Contains(obtained, substr) {
-		return a.failFunc(Containment, obtained, substr, msg)
+		return a.failFunc(Substring, obtained, substr, msg)
 	}
 	return true
 }
@@ -247,6 +241,9 @@ func (a Asserts) Match(obtained, regex, msg string) bool {
 
 // ErrorMatch tests if the obtained error as string matches a regular expression.
 func (a Asserts) ErrorMatch(obtained error, regex, msg string) bool {
+	if obtained == nil {
+		return a.failFunc(ErrorMatch, nil, regex, "error is nil")		
+	}
 	matches, err := regexp.MatchString("^"+regex+"$", obtained.Error())
 	if err != nil {
 		return a.failFunc(ErrorMatch, obtained, regex, "can't compile regex: "+err.Error())
@@ -257,18 +254,18 @@ func (a Asserts) ErrorMatch(obtained error, regex, msg string) bool {
 	return true
 }
 
-// Implements tests if obtained implements the expected interface variable pointer.
-func (a Asserts) Implements(obtained, expected interface{}, msg string) bool {
+// Implementor tests if obtained implements the expected interface variable pointer.
+func (a Asserts) Implementor(obtained, expected interface{}, msg string) bool {
 	obtainedValue := reflect.ValueOf(obtained)
 	expectedValue := reflect.ValueOf(expected)
 	if !obtainedValue.IsValid() {
-		return a.failFunc(Implements, obtained, expected, "obtained value is invalid")
+		return a.failFunc(Implementor, obtained, expected, "obtained value is invalid")
 	}
 	if !expectedValue.IsValid() || expectedValue.Kind() != reflect.Ptr || expectedValue.Elem().Kind() != reflect.Interface {
-		return a.failFunc(Implements, obtained, expected, "expected value is no interface variable pointer")
+		return a.failFunc(Implementor, obtained, expected, "expected value is no interface variable pointer")
 	}
 	if !obtainedValue.Type().Implements(expectedValue.Elem().Type()) {
-		return a.failFunc(Implements, obtained, expected, msg)
+		return a.failFunc(Implementor, obtained, expected, msg)
 	}
 	return true
 }

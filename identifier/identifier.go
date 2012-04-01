@@ -23,12 +23,6 @@ import (
 )
 
 //--------------------
-// CONST
-//--------------------
-
-const RELEASE = "Tideland Common Go Library - Identifier - Release 2012-02-16"
-
-//--------------------
 // UUID
 //--------------------
 

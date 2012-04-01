@@ -17,12 +17,6 @@ import (
 )
 
 //--------------------
-// CONST
-//--------------------
-
-const RELEASE = "Tideland Common Go Library - Utilities - Release 2012-03-04"
-
-//--------------------
 // METHOD DISPATCHING
 //--------------------
 

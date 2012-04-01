@@ -17,12 +17,6 @@ import (
 )
 
 //--------------------
-// CONST
-//--------------------
-
-const RELEASE = "Tideland Common Go Library - Sort - Release 2012-02-21"
-
-//--------------------
 // CONTROL VALUES
 //--------------------
 

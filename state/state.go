@@ -19,12 +19,6 @@ import (
 )
 
 //--------------------
-// CONST
-//--------------------
-
-const RELEASE = "Tideland Common Go Library - Finite State Machine - Release 2012-02-24"
-
-//--------------------
 // FINITE STATE MACHINE
 //--------------------
 

@@ -22,12 +22,6 @@ import (
 )
 
 //--------------------
-// CONST
-//--------------------
-
-const RELEASE = "Tideland Common Go Library - Cells - Release 2012-03-11"
-
-//--------------------
 // BASIC INTERFACES AND TYPES
 //--------------------
 
@@ -178,6 +172,7 @@ type Environment struct {
 	cells         map[string]*cell
 	subscribers   assignments
 	subscriptions assignments
+	tickers       map[string]*ticker
 }
 
 // NewEnvironment creates a new environment.
@@ -187,6 +182,7 @@ func NewEnvironment(id string) *Environment {
 		cells:         make(map[string]*cell),
 		subscribers:   make(assignments),
 		subscriptions: make(assignments),
+		tickers:       make(map[string]*ticker),
 	}
 	runtime.SetFinalizer(env, (*Environment).Shutdown)
 	return env
@@ -311,10 +307,35 @@ func (env *Environment) raiseSubscribers(id string, e Event) {
 	}
 }
 
+// AddTicker adds a new ticker for periodical ticker events with the given
+// id to the raiseId.
+func (env *Environment) AddTicker(id, raiseId string, period time.Duration) error {
+	if _, ok := env.tickers[id]; ok {
+		return fmt.Errorf("ticker with id %q already added", id)
+	}
+	env.tickers[id] = startTicker(env, id, raiseId, period)
+	return nil
+}
+
+// RemoveTicker removes a periodical ticker event.
+func (env *Environment) RemoveTicker(id string) error {
+	if ticker, ok := env.tickers[id]; ok {
+		ticker.stop()
+		delete(env.tickers, id)
+		return nil
+	}
+	return fmt.Errorf("ticker with id %q does not exist", id)	
+}
+
 // Shutdown manages the proper finalization of an environment.
 func (env *Environment) Shutdown() error {
 	env.mutex.Lock()
 	defer env.mutex.Unlock()
+	// Stop all tickers.
+	for _, ticker := range env.tickers {
+		ticker.stop()
+	}
+	env.tickers = nil
 	// Stop all cells and delete registry.
 	for id, c := range env.cells {
 		err := c.stop()

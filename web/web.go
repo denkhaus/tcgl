@@ -21,12 +21,6 @@ import (
 )
 
 //--------------------
-// CONST
-//--------------------
-
-const RELEASE = "Tideland Common Go Library -  Web - Release 2012-03-12"
-
-//--------------------
 // RESOURCE HANDLER
 //--------------------
 
