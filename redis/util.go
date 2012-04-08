@@ -96,7 +96,7 @@ func (e *InvalidIndexError) Error() string {
 
 // DatabaseClosedError is returned when Redis is used in a closed state.
 type DatabaseClosedError struct {
-	database *RedisDatabase
+	database *Database
 }
 
 // Error returns the error in a readable form.

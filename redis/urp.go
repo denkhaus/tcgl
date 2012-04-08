@@ -68,7 +68,7 @@ type envPublishedData struct {
 
 // unifiedRequestProtocol implements the Redis unified request protocol URP.
 type unifiedRequestProtocol struct {
-	database          *RedisDatabase
+	database          *Database
 	conn              net.Conn
 	writer            *bufio.Writer
 	reader            *bufio.Reader
@@ -80,15 +80,15 @@ type unifiedRequestProtocol struct {
 }
 
 // newUnifiedRequestProtocol creates a new protocol.
-func newUnifiedRequestProtocol(rd *RedisDatabase) (*unifiedRequestProtocol, error) {
+func newUnifiedRequestProtocol(db *Database) (*unifiedRequestProtocol, error) {
 	// Establish the connection.
-	conn, err := net.DialTimeout("tcp", rd.configuration.Address, rd.configuration.Timeout)
+	conn, err := net.DialTimeout("tcp", db.configuration.Address, db.configuration.Timeout)
 	if err != nil {
 		return nil, &ConnectionError{err}
 	}
 	// Create the URP.
 	urp := &unifiedRequestProtocol{
-		database:          rd,
+		database:          db,
 		conn:              conn,
 		writer:            bufio.NewWriter(conn),
 		reader:            bufio.NewReader(conn),
@@ -103,16 +103,16 @@ func newUnifiedRequestProtocol(rd *RedisDatabase) (*unifiedRequestProtocol, erro
 	go urp.backend()
 	// Select database.
 	rs := newResultSet("select")
-	urp.command(rs, false, "select", rd.configuration.Database)
+	urp.command(rs, false, "select", db.configuration.Database)
 	if !rs.IsOK() {
 		// Connection or database is not ok, so reset.
 		urp.stop()
 		return nil, rs.Error()
 	}
 	// Authenticate if needed.
-	if rd.configuration.Auth != "" {
+	if db.configuration.Auth != "" {
 		rs = newResultSet("auth")
-		urp.command(rs, false, "auth", rd.configuration.Auth)
+		urp.command(rs, false, "auth", db.configuration.Auth)
 		if !rs.IsOK() {
 			// Authentication is not ok, so reset.
 			urp.stop()

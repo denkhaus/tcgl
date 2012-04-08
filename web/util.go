@@ -31,7 +31,7 @@ const (
 	CT_HTML  = "text/html"
 	CT_XML   = "application/xml"
 	CT_JSON  = "application/json"
-	CT_GOB   = "application/vnd.tideland.rwf"
+	CT_GOB   = "application/vnd.tideland.gob"
 )
 
 //--------------------

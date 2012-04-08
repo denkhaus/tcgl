@@ -135,7 +135,7 @@ func handleFunc(rw http.ResponseWriter, r *http.Request) {
 		http.Error(ctx.ResponseWriter, msg, http.StatusNotFound)
 	} else {
 		// Redirect to default handler.
-		applog.Infof("domain '%v' and resource '%v' not found, redirecting to default", ctx.Domain, ctx.Resource)
+		applog.Warningf("domain '%v' and resource '%v' not found, redirecting to default", ctx.Domain, ctx.Resource)
 		ctx.Redirect(srv.defaultDomain, srv.defaultResource, "")
 	}
 }

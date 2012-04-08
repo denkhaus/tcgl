@@ -55,7 +55,7 @@ type Subscription struct {
 // newSubscription creates a new subscription.
 func newSubscription(urp *unifiedRequestProtocol, channels ...string) *Subscription {
 	sub := &Subscription{
-		urp: urp,
+		urp:       urp,
 		valueChan: make(chan *SubscriptionValue, 10),
 	}
 	sub.channelCount = sub.urp.subscribe(channels...)

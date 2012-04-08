@@ -40,11 +40,11 @@ func (c *Configuration) String() string {
 }
 
 //--------------------
-// REDIS DATABASE
+// DATABASE
 //--------------------
 
-// RedisDatabase manages the access to one database.
-type RedisDatabase struct {
+// Database manages the access to one database.
+type Database struct {
 	mutex         sync.Mutex
 	configuration *Configuration
 	pool          chan *unifiedRequestProtocol
@@ -52,31 +52,31 @@ type RedisDatabase struct {
 	dbClosed      bool
 }
 
-// NewRedisDatabase create a new accessor.
-func NewRedisDatabase(c Configuration) *RedisDatabase {
+// Connect connects a Redis database based on the configuration.
+func Connect(c Configuration) *Database {
 	checkConfiguration(&c)
 	// Create the database client instance.
-	rd := &RedisDatabase{
+	db := &Database{
 		configuration: &c,
 		pool:          make(chan *unifiedRequestProtocol, c.PoolSize),
 	}
 	// Init pool with nils.
 	for i := 0; i < c.PoolSize; i++ {
-		rd.pool <- nil
+		db.pool <- nil
 	}
-	return rd
+	return db
 }
 
 // Command performs a Redis command.
-func (rd *RedisDatabase) Command(cmd string, args ...interface{}) *ResultSet {
+func (db *Database) Command(cmd string, args ...interface{}) *ResultSet {
 	rs := newResultSet(cmd)
-	if rd.dbClosed {
-		rs.err = &DatabaseClosedError{rd}
+	if db.dbClosed {
+		rs.err = &DatabaseClosedError{db}
 		return rs
 	}
 
-	urp, err := rd.pullURP()
-	defer rd.pushURP(urp)
+	urp, err := db.pullURP()
+	defer db.pushURP(urp)
 
 	if err != nil {
 		rs.err = err
@@ -87,23 +87,23 @@ func (rd *RedisDatabase) Command(cmd string, args ...interface{}) *ResultSet {
 }
 
 // AsyncCommand performs a Redis command asynchronously.
-func (rd *RedisDatabase) AsyncCommand(cmd string, args ...interface{}) *Future {
+func (db *Database) AsyncCommand(cmd string, args ...interface{}) *Future {
 	fut := newFuture()
 	go func() {
-		fut.setResultSet(rd.Command(cmd, args...))
+		fut.setResultSet(db.Command(cmd, args...))
 	}()
 	return fut
 }
 
 // MultiCommand executes a function for the performing
 // of multiple commands in one call.
-func (rd *RedisDatabase) MultiCommand(f func(*MultiCommand)) *ResultSet {
+func (db *Database) MultiCommand(f func(*MultiCommand)) *ResultSet {
 	// Create result set.
 	rs := newResultSet("multi")
 	rs.resultSets = []*ResultSet{}
 
-	urp, err := rd.pullURP()
-	defer rd.pushURP(urp)
+	urp, err := db.pullURP()
+	defer db.pushURP(urp)
 
 	if err != nil {
 		rs.err = err
@@ -117,18 +117,18 @@ func (rd *RedisDatabase) MultiCommand(f func(*MultiCommand)) *ResultSet {
 
 // AsyncMultiCommand executes a function for the performing
 // of multiple commands in one call asynchronously.
-func (rd *RedisDatabase) AsyncMultiCommand(f func(*MultiCommand)) *Future {
+func (db *Database) AsyncMultiCommand(f func(*MultiCommand)) *Future {
 	fut := newFuture()
 	go func() {
-		fut.setResultSet(rd.MultiCommand(f))
+		fut.setResultSet(db.MultiCommand(f))
 	}()
 	return fut
 }
 
 // Subscribe to one or more channels.
-func (rd *RedisDatabase) Subscribe(channel ...string) (*Subscription, error) {
+func (db *Database) Subscribe(channel ...string) (*Subscription, error) {
 	// URP handling.
-	urp, err := newUnifiedRequestProtocol(rd)
+	urp, err := newUnifiedRequestProtocol(db)
 	if err != nil {
 		return nil, err
 	}
@@ -137,8 +137,8 @@ func (rd *RedisDatabase) Subscribe(channel ...string) (*Subscription, error) {
 }
 
 // Publish a message to a channel.
-func (rd *RedisDatabase) Publish(channel string, message interface{}) (int, error) {
-	rs := rd.Command("publish", channel, message)
+func (db *Database) Publish(channel string, message interface{}) (int, error) {
+	rs := db.Command("publish", channel, message)
 	if !rs.IsOK() {
 		return 0, rs.Error()
 	}
@@ -151,34 +151,34 @@ func (rd *RedisDatabase) Publish(channel string, message interface{}) (int, erro
 
 // pullURP retrieves a unified request protocol managing the
 // communication with Redis out of the pool.
-func (rd *RedisDatabase) pullURP() (*unifiedRequestProtocol, error) {
-	rd.mutex.Lock()
-	defer rd.mutex.Unlock()
+func (db *Database) pullURP() (*unifiedRequestProtocol, error) {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
 
-	urp := <-rd.pool
+	urp := <-db.pool
 	if urp == nil {
 		// Lazy creation of a new URP.
 		var err error
-		urp, err = newUnifiedRequestProtocol(rd)
+		urp, err = newUnifiedRequestProtocol(db)
 		if err != nil {
 			return nil, err
 		}
 	}
-	rd.poolUsage++
-	monitoring.SetVariable(identifier.Identifier("redis", "pool", "usage"), int64(rd.poolUsage))
+	db.poolUsage++
+	monitoring.SetVariable(identifier.Identifier("redis", "pool", "usage"), int64(db.poolUsage))
 	return urp, nil
 }
 
 // pushURP returns a unified request protocol back to the pool.
-func (rd *RedisDatabase) pushURP(urp *unifiedRequestProtocol) {
-	rd.mutex.Lock()
-	defer rd.mutex.Unlock()
+func (db *Database) pushURP(urp *unifiedRequestProtocol) {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
 
-	rd.pool <- urp
+	db.pool <- urp
 	if urp != nil {
-		rd.poolUsage--
+		db.poolUsage--
 	}
-	monitoring.SetVariable(identifier.Identifier("redis", "pool", "usage"), int64(rd.poolUsage))
+	monitoring.SetVariable(identifier.Identifier("redis", "pool", "usage"), int64(db.poolUsage))
 }
 
 //--------------------
