@@ -110,6 +110,12 @@ func Identifier(parts ...interface{}) string {
 	return SepIdentifier(":", parts...)
 }
 
+// JoinedIdentifier builds a new identifier, joinded with the
+// colon as the seperator.
+func JoinedIdentifier(identifiers ...string) string {
+	return strings.Join(identifiers, ":")
+}
+
 // TypeAsIdentifierPart transforms the name of the arguments type into 
 // a part for identifiers. It's splitted at each uppercase char, 
 // concatenated with dashes and transferred to lowercase.

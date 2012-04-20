@@ -14,6 +14,7 @@ package redis
 import (
 	"code.google.com/p/tcgl/asserts"
 	"code.google.com/p/tcgl/monitoring"
+	"errors"
 	"testing"
 	"time"
 )
@@ -55,6 +56,27 @@ func (htt *hashableTestType) SetHash(h Hash) {
 // TESTS
 //--------------------
 
+func TestErrorChecking(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
+
+	assert.True(IsConnectionError(&ConnectionError{}), "Positive connection error.")
+	assert.False(IsConnectionError(errors.New("Foo")), "Negative connection error.")
+	assert.True(IsTimeoutError(&TimeoutError{}), "Positive timeout error.")
+	assert.False(IsTimeoutError(errors.New("Foo")), "Negative timeout error.")
+	assert.True(IsInvalidReplyError(&InvalidReplyError{}), "Positive invalid reply error.")
+	assert.False(IsInvalidReplyError(errors.New("Foo")), "Negative invalid reply error.")
+	assert.True(IsInvalidTerminationError(&InvalidTerminationError{}), "Positive invalid termination error.")
+	assert.False(IsInvalidTerminationError(errors.New("Foo")), "Negative invalid termination error.")
+	assert.True(IsInvalidTypeError(&InvalidTypeError{}), "Positive invalid type error.")
+	assert.False(IsInvalidTypeError(errors.New("Foo")), "Negative invalid type error.")
+	assert.True(IsInvalidKeyError(&InvalidKeyError{}), "Positive invalid key error.")
+	assert.False(IsInvalidKeyError(errors.New("Foo")), "Negative invalid key error.")
+	assert.True(IsInvalidIndexError(&InvalidIndexError{}), "Positive invalid index error.")
+	assert.False(IsInvalidIndexError(errors.New("Foo")), "Negative invalid index error.")
+	assert.True(IsDatabaseClosedError(&DatabaseClosedError{}), "Positive database closed error.")
+	assert.False(IsDatabaseClosedError(errors.New("Foo")), "Negative database closed error.")
+}
+
 func TestConnection(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	db := Connect(Configuration{})
@@ -78,12 +100,21 @@ func TestSimpleSingleValue(t *testing.T) {
 	assert.Equal(rs.Command(), "get", "Command has been 'get'.")
 	assert.Equal(rs.ValueCount(), 1, "'get' returned one value.")
 	assert.Equal(rs.Value().String(), "Hello, World!", "'get' returned the right value.")
+
+	db.Command("del", "single-exists")
+	set, err := db.Command("setnx", "single-exists", "foo").ValueAsBool()
+	assert.Nil(err, "'setnx' without error.")
+	assert.True(set, "'setnx' returned true.")
+	set, err = db.Command("setnx", "single-exists", "bar").ValueAsBool()
+	assert.Nil(err, "'setnx' without error.")
+	assert.False(set, "'setnx' returned false.")
 }
 
 func TestSimpleMultipleValues(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	db := Connect(Configuration{})
 
+	// Simple read of multiple keys.
 	db.Command("del", "multiple-value:1")
 	db.Command("del", "multiple-value:2")
 	db.Command("del", "multiple-value:3")
@@ -100,12 +131,31 @@ func TestSimpleMultipleValues(t *testing.T) {
 	assert.True(rs.IsOK(), "'mget' is ok.")
 	assert.False(rs.IsMulti(), "'mget' returned no multi-result-set.")
 	assert.Equal(rs.Command(), "mget", "Command has been 'mget'.")
-	assert.Equal(rs.ValueCount(), 5, "'mget' returned five value.")
+	assert.Equal(rs.ValueCount(), 5, "'mget' returned five values.")
 	assert.Equal(rs.ValueAt(0).String(), "one", "'mget' returned the right first value.")
 	assert.Equal(rs.ValueAt(1).String(), "two", "'mget' returned the right second value.")
 	assert.Equal(rs.ValueAt(2).String(), "three", "'mget' returned the right third value.")
 	assert.Equal(rs.ValueAt(3).String(), "four", "'mget' returned the right fourth value.")
 	assert.Equal(rs.ValueAt(4).String(), "five", "'mget' returned the right fifth value.")
+	assert.Equal(rs.ValuesAsStrings(), []string{"one", "two", "three", "four", "five"}, "Returning values as slice worked.")
+
+	// Read sorted set with keys and values (scores).
+	db.Command("del", "sorted-set")
+
+	db.Command("zadd", "sorted-set", 16, "one")
+	db.Command("zadd", "sorted-set", 8, "two")
+	db.Command("zadd", "sorted-set", 4, "three")
+	db.Command("zadd", "sorted-set", 2, "four")
+	db.Command("zadd", "sorted-set", 1, "five")
+
+	rs = db.Command("zrevrange", "sorted-set", 0, 10, "withscores")
+	assert.True(rs.IsOK(), "'zrevrange' is ok.")
+	assert.Equal(rs.ValueCount(), 10, "'zrevrange' returned ten values.")
+	kv := rs.KeyValues()
+	assert.Equal(kv[0].Key, "one", "Key 0 is ok.")
+	assert.Equal(kv[0].Value.String(), "16", "Value 0 is ok.")
+	assert.Equal(kv[4].Key, "five", "Key 4 is ok.")
+	assert.Equal(kv[4].Value.String(), "1", "Value 4 is ok.")
 }
 
 func TestHash(t *testing.T) {

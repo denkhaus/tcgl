@@ -304,6 +304,7 @@ func (urp *unifiedRequestProtocol) handleSubscription(es *envSubscription) {
 
 // handlePublishing handles the publishing of data to a channel.
 func (urp *unifiedRequestProtocol) handlePublishing(ed *envData) {
+	start := time.Now()
 	// Continue according to the initial data.
 	switch {
 	case ed.err != nil:
@@ -320,12 +321,15 @@ func (urp *unifiedRequestProtocol) handlePublishing(ed *envData) {
 			values[i] = ed.data
 		}
 		urp.publishedDataChan <- &envPublishedData{values, nil}
+	case ed.length == 0:
+		// No result.
+		urp.publishedDataChan <- &envPublishedData{[][]byte{}, nil}
 	case ed.length == -1:
 		// Timeout.
-		urp.publishedDataChan <- &envPublishedData{nil, errors.New("redis: timeout")}
+		urp.publishedDataChan <- &envPublishedData{nil, &TimeoutError{time.Now().Sub(start)}}
 	default:
 		// Invalid reply.
-		urp.publishedDataChan <- &envPublishedData{nil, errors.New("redis: invalid reply")}
+		urp.publishedDataChan <- &envPublishedData{nil, &InvalidReplyError{ed.length, ed.data, ed.err}}
 	}
 }
 
@@ -449,10 +453,16 @@ func (urp *unifiedRequestProtocol) receiveReply(rs *ResultSet, multi bool) {
 				rs.values[i] = Value(ied.data)
 			}
 		}
+	case ed.length == 0:
+		// No result.
+		rs.values = []Value{}
+		rs.err = nil
 	case ed.length == -1:
+		// Timeout.
 		rs.err = &TimeoutError{time.Now().Sub(start)}
 	default:
-		rs.err = &InvalidReplyError{}
+		// Invalid reply.
+		rs.err = &InvalidReplyError{ed.length, ed.data, ed.err}
 	}
 }
 

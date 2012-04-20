@@ -19,6 +19,7 @@ import (
 	"path"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -82,16 +83,20 @@ const timeFormat = "2006-01-02 15:04:05 Z07:00"
 // StandardLogger is a simple logger writing to the given writer. It
 // doesn't handle the levels differently.
 type StandardLogger struct {
-	out io.Writer
+	mutex sync.Mutex
+	out   io.Writer
 }
 
 // NewStandardLogger creates the standard logger.
 func NewStandardLogger(out io.Writer) Logger {
-	return &StandardLogger{out}
+	return &StandardLogger{out: out}
 }
 
 // Debug logs a message at debug level.
-func (sl StandardLogger) Debug(info, msg string) {
+func (sl *StandardLogger) Debug(info, msg string) {
+	sl.mutex.Lock()
+	defer sl.mutex.Unlock()
+
 	io.WriteString(sl.out, "[D] ")
 	io.WriteString(sl.out, time.Now().Format(timeFormat))
 	io.WriteString(sl.out, " ")
@@ -102,7 +107,10 @@ func (sl StandardLogger) Debug(info, msg string) {
 }
 
 // Info logs a message at info level.
-func (sl StandardLogger) Info(info, msg string) {
+func (sl *StandardLogger) Info(info, msg string) {
+	sl.mutex.Lock()
+	defer sl.mutex.Unlock()
+
 	io.WriteString(sl.out, "[I] ")
 	io.WriteString(sl.out, time.Now().Format(timeFormat))
 	io.WriteString(sl.out, " ")
@@ -113,7 +121,10 @@ func (sl StandardLogger) Info(info, msg string) {
 }
 
 // Warning logs a message at warning level.
-func (sl StandardLogger) Warning(info, msg string) {
+func (sl *StandardLogger) Warning(info, msg string) {
+	sl.mutex.Lock()
+	defer sl.mutex.Unlock()
+
 	io.WriteString(sl.out, "[W] ")
 	io.WriteString(sl.out, time.Now().Format(timeFormat))
 	io.WriteString(sl.out, " ")
@@ -124,7 +135,10 @@ func (sl StandardLogger) Warning(info, msg string) {
 }
 
 // Error logs a message at error level.
-func (sl StandardLogger) Error(info, msg string) {
+func (sl *StandardLogger) Error(info, msg string) {
+	sl.mutex.Lock()
+	defer sl.mutex.Unlock()
+
 	io.WriteString(sl.out, "[E] ")
 	io.WriteString(sl.out, time.Now().Format(timeFormat))
 	io.WriteString(sl.out, " ")
@@ -135,7 +149,10 @@ func (sl StandardLogger) Error(info, msg string) {
 }
 
 // Critical logs a message at critical level.
-func (sl StandardLogger) Critical(info, msg string) {
+func (sl *StandardLogger) Critical(info, msg string) {
+	sl.mutex.Lock()
+	defer sl.mutex.Unlock()
+
 	io.WriteString(sl.out, "[C] ")
 	io.WriteString(sl.out, time.Now().Format(timeFormat))
 	io.WriteString(sl.out, " ")

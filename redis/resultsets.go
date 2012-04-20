@@ -318,6 +318,15 @@ func (rs *ResultSet) ValueAsString() string {
 	return rs.Value().String()
 }
 
+// ValuesAsStrings returns all values as string slice.
+func (rs *ResultSet) ValuesAsStrings() []string {
+	values := []string{}
+	for _, v := range rs.values {
+		values = append(values, v.String())
+	}
+	return values
+}
+
 // KeyValue return the first value as key and the second as value.
 func (rs *ResultSet) KeyValue() *KeyValue {
 	return &KeyValue{
@@ -326,23 +335,44 @@ func (rs *ResultSet) KeyValue() *KeyValue {
 	}
 }
 
+// KeyValues returns the alternating values as key/value slice.
+func (rs *ResultSet) KeyValues() []*KeyValue {
+	kvs := []*KeyValue{}
+	key := ""
+	for idx, v := range rs.values {
+		if idx%2 == 0 {
+			key = v.String()
+		} else {
+			kvs = append(kvs, &KeyValue{key, v})
+		}
+	}
+	return kvs
+}
+
 // ValuesDo iterates over the result values and
 // performs the passed function for each one.
-func (rs *ResultSet) ValuesDo(f func(int, Value)) {
+func (rs *ResultSet) ValuesDo(f func(int, Value) error) error {
 	for idx, v := range rs.values {
-		f(idx, v)
+		if err := f(idx, v); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // ValuesMap iterates over the result values and
 // performs the passed function for each one. The result
 // is a slice of values returned by the functions.
-func (rs *ResultSet) ValuesMap(f func(Value) interface{}) []interface{} {
+func (rs *ResultSet) ValuesMap(f func(Value) (interface{}, error)) ([]interface{}, error) {
+	var err error
 	result := make([]interface{}, len(rs.values))
 	for idx, v := range rs.values {
-		result[idx] = f(v)
+		result[idx], err = f(v)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return result
+	return result, nil
 }
 
 // Hash returns the values of the result set as hash.

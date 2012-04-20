@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -34,6 +35,19 @@ type Envelope struct {
 	Message string
 	Payload interface{}
 }
+
+//--------------------
+// LANGUAGE
+//--------------------
+
+// Language is an accepted language with value.
+type Language struct {
+	Locale string
+	Value  float64
+}
+
+// Languages is the ordered set of accepted languages.
+type Languages []Language
 
 //--------------------
 // CONTEXT
@@ -77,24 +91,43 @@ func (ctx *Context) String() string {
 	return fmt.Sprintf("%s /%s/%s/%s", ctx.Request.Method, ctx.Domain, ctx.Resource, ctx.ResourceId)
 }
 
-// Checks if the requestor accepts plain text as a content type.
+// AcceptsPlain checks if the requestor accepts plain text as a content type.
 func (ctx *Context) AcceptsPlain() bool {
 	return strings.Contains(ctx.Request.Header.Get("Accept"), CT_PLAIN)
 }
 
-// Checks if the requestor accepts HTML as a content type.
+// AcceptsHTML checks if the requestor accepts HTML as a content type.
 func (ctx *Context) AcceptsHTML() bool {
 	return strings.Contains(ctx.Request.Header.Get("Accept"), CT_HTML)
 }
 
-// Checks if the requestor accepts XML as a content type.
+// AcceptsXML checks if the requestor accepts XML as a content type.
 func (ctx *Context) AcceptsXML() bool {
 	return strings.Contains(ctx.Request.Header.Get("Accept"), CT_XML)
 }
 
-// Checks if the requestor accepts JSON as a content type.
+// AcceptsJSON checks if the requestor accepts JSON as a content type.
 func (ctx *Context) AcceptsJSON() bool {
 	return strings.Contains(ctx.Request.Header.Get("Accept"), CT_JSON)
+}
+
+// Languages returns the accepted language with the quality values.
+func (ctx *Context) Languages() Languages {
+	accept := ctx.Request.Header.Get("Accept-Language")
+	languages := Languages{}
+	for _, part := range strings.Split(accept, ",") {
+		lv := strings.Split(part, ";")
+		if len(lv) == 1 {
+			languages = append(languages, Language{lv[0], 1.0})
+		} else {
+			value, err := strconv.ParseFloat(lv[1], 64)
+			if err != nil {
+				value = 0.0
+			}
+			languages = append(languages, Language{lv[0], value})
+		}
+	}
+	return languages
 }
 
 // Redirect to a domain, resource and resource id (optional).

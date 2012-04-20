@@ -31,6 +31,12 @@ func (e *ConnectionError) Error() string {
 	return fmt.Sprintf("redis: connection has a an error: %v", e.Err)
 }
 
+// IsConnectionError check if the passed error is a connection error.
+func IsConnectionError(err error) bool {
+	_, ok := err.(*ConnectionError)
+	return ok
+}
+
 // TimeoutError is returned when Redis signals a timeout.
 type TimeoutError struct {
 	ElapsedTime time.Duration
@@ -41,13 +47,29 @@ func (e *TimeoutError) Error() string {
 	return fmt.Sprintf("redis: timeout after %s", e.ElapsedTime)
 }
 
+// IsTimeoutError check if the passed error is a timeout error.
+func IsTimeoutError(err error) bool {
+	_, ok := err.(*TimeoutError)
+	return ok
+}
+
 // InvalidReplyError is returned when the client recieves an
 // invalid answer.
-type InvalidReplyError struct{}
+type InvalidReplyError struct {
+	Length int
+	Data   []byte
+	Err    error
+}
 
 // Error returns the error in a readable form.
 func (e *InvalidReplyError) Error() string {
-	return "redis: invalid reply"
+	return fmt.Sprintf("redis: invalid reply (length: %d / data: %v / error: %v)", e.Length, e.Data, e.Err)
+}
+
+// IsInvalidReplyError check if the passed error is an invalid reply error.
+func IsInvalidReplyError(err error) bool {
+	_, ok := err.(*InvalidReplyError)
+	return ok
 }
 
 // InvalidTerminationError is returned when a command terminates
@@ -57,6 +79,12 @@ type InvalidTerminationError struct{}
 // Error returns the error in a readable form.
 func (e *InvalidTerminationError) Error() string {
 	return "redis: invalid command termination"
+}
+
+// IsInvalidTerminationError check if the passed error is an invalid termmination error.
+func IsInvalidTerminationError(err error) bool {
+	_, ok := err.(*InvalidTerminationError)
+	return ok
 }
 
 // InvalidTypeError is returned when the client recieves an
@@ -72,6 +100,12 @@ func (e *InvalidTypeError) Error() string {
 	return fmt.Sprintf("redis: invalid type %q for %q (%v)", e.ExpectedType, e.Value, e.Err)
 }
 
+// IsInvalidTypeError check if the passed error is an invalid type error.
+func IsInvalidTypeError(err error) bool {
+	_, ok := err.(*InvalidTypeError)
+	return ok
+}
+
 // InvalidKeyError is returned when a key or hash field
 // doesn't exist.
 type InvalidKeyError struct {
@@ -81,6 +115,12 @@ type InvalidKeyError struct {
 // Error returns the error in a readable form.
 func (e *InvalidKeyError) Error() string {
 	return fmt.Sprintf("redis: invalid key %q", e.Key)
+}
+
+// IsInvalidKeyError check if the passed error is an invalid key error.
+func IsInvalidKeyError(err error) bool {
+	_, ok := err.(*InvalidKeyError)
+	return ok
 }
 
 // InvalidIndexError is returned when an illegal index for addressing is used.
@@ -94,6 +134,12 @@ func (e *InvalidIndexError) Error() string {
 	return fmt.Sprintf("redis: invalid index %d, length is %d", e.Index, e.Length)
 }
 
+// IsInvalidIndexError check if the passed error is an invalid index error.
+func IsInvalidIndexError(err error) bool {
+	_, ok := err.(*InvalidIndexError)
+	return ok
+}
+
 // DatabaseClosedError is returned when Redis is used in a closed state.
 type DatabaseClosedError struct {
 	database *Database
@@ -102,6 +148,12 @@ type DatabaseClosedError struct {
 // Error returns the error in a readable form.
 func (e *DatabaseClosedError) Error() string {
 	return fmt.Sprintf("redis: database %q is closed", e.database.configuration)
+}
+
+// IsDatabaseClosedError check if the passed error is a database closed error.
+func IsDatabaseClosedError(err error) bool {
+	_, ok := err.(*DatabaseClosedError)
+	return ok
 }
 
 //--------------------
