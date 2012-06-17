@@ -20,7 +20,7 @@ import (
 // TESTS
 //--------------------
 
-// Test the method dispatch function.
+// TestDispatch tests the method dispatch function.
 func TestDispatch(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	on := Switch{true}
@@ -32,7 +32,7 @@ func TestDispatch(t *testing.T) {
 	assert.Equal(on.String(), "off", "Inactive switch as string is 'off'")
 }
 
-// Test the integer generator.
+// TestLazyIntEvaluator tests the integer generator.
 func TestLazyIntEvaluator(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	fibFunc := func(s interface{}) (interface{}, interface{}) {

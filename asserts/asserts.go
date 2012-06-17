@@ -57,7 +57,7 @@ var testNames = []string{
 	NotNil:       "not nil",
 	Equal:        "equal",
 	Different:    "different",
-	About:	      "about",
+	About:        "about",
 	Substring:    "substring",
 	Match:        "match",
 	ErrorMatch:   "error match",
@@ -109,21 +109,19 @@ func generateTestingFailFunc(t *testing.T, fail bool) FailFunc {
 		funcName := funcNameParts[funcNamePartsIdx]
 		buffer := &bytes.Buffer{}
 		fmt.Fprintf(buffer, "--------------------------------------------------------------------------------\n")
-		fmt.Fprintf(buffer, "Assert '%s' failed!\n\n", test)
-		fmt.Fprintf(buffer, "Filename: %s\n", fileName)
-		fmt.Fprintf(buffer, "Function: %s()\n", funcName)
-		fmt.Fprintf(buffer, "Line    : %d\n", line)
+		fmt.Fprintf(buffer, "%s:%d: Assert '%s' failed!\n\n", fileName, line, test)
+		fmt.Fprintf(buffer, "Function....: %s()\n", funcName)
 		switch test {
 		case True, False, Nil, NotNil, Empty, NotEmpty:
-			fmt.Fprintf(buffer, "Obtained: %v\n", obtained)
+			fmt.Fprintf(buffer, "Obtained....: %v\n", obtained)
 		case Implementor, Assignable, Unassignable:
-			fmt.Fprintf(buffer, "Obtained: %v\n", ValueDescription(obtained))
-			fmt.Fprintf(buffer, "Expected: %v\n", ValueDescription(expected))
+			fmt.Fprintf(buffer, "Obtained....: %v\n", ValueDescription(obtained))
+			fmt.Fprintf(buffer, "Expected....: %v\n", ValueDescription(expected))
 		default:
-			fmt.Fprintf(buffer, "Obtained: %v\n", obtained)
-			fmt.Fprintf(buffer, "Expected: %v\n", expected)
+			fmt.Fprintf(buffer, "Obtained....: %v\n", obtained)
+			fmt.Fprintf(buffer, "Expected....: %v\n", expected)
 		}
-		fmt.Fprintf(buffer, "Message : %s\n", msg)
+		fmt.Fprintf(buffer, "Description: %s\n", msg)
 		fmt.Fprintf(buffer, "--------------------------------------------------------------------------------\n")
 		fmt.Print(buffer)
 		if fail {
@@ -242,7 +240,7 @@ func (a Asserts) Match(obtained, regex, msg string) bool {
 // ErrorMatch tests if the obtained error as string matches a regular expression.
 func (a Asserts) ErrorMatch(obtained error, regex, msg string) bool {
 	if obtained == nil {
-		return a.failFunc(ErrorMatch, nil, regex, "error is nil")		
+		return a.failFunc(ErrorMatch, nil, regex, "error is nil")
 	}
 	matches, err := regexp.MatchString("^"+regex+"$", obtained.Error())
 	if err != nil {
@@ -310,7 +308,7 @@ func (a Asserts) Empty(obtained interface{}, msg string) bool {
 			return a.failFunc(Empty, obtainedLen, 0, msg)
 		}
 	default:
-		return a.failFunc(Empty, ValueDescription(obtained), 0, 
+		return a.failFunc(Empty, ValueDescription(obtained), 0,
 			"obtained type is no array, chan, map, slice, string or has method Len()")
 	}
 	return true
@@ -336,7 +334,7 @@ func (a Asserts) NotEmpty(obtained interface{}, msg string) bool {
 			return a.failFunc(NotEmpty, obtainedLen, nil, msg)
 		}
 	default:
-		return a.failFunc(NotEmpty, ValueDescription(obtained), nil, 
+		return a.failFunc(NotEmpty, ValueDescription(obtained), nil,
 			"obtained type is no array, chan, map, slice, string or has method Len()")
 	}
 	return true
@@ -362,7 +360,7 @@ func (a Asserts) Length(obtained interface{}, expected int, msg string) bool {
 			return a.failFunc(Length, obtainedLen, expected, msg)
 		}
 	default:
-		return a.failFunc(Length, ValueDescription(obtained), 0, 
+		return a.failFunc(Length, ValueDescription(obtained), 0,
 			"obtained type is no array, chan, map, slice, string or has method Len()")
 	}
 	return true

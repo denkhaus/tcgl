@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"time"
 )
 
@@ -23,25 +24,24 @@ import (
 //--------------------
 
 const (
-	etmTLine  = "+------------------------------------------+-----------+-----------+-----------+-----------+---------------+-----------+\n"
-	etmHeader = "| Name                                     | Count     | Min Dur   | Max Dur   | Avg Dur   | Total Dur     | Op/Sec    |\n"
-	etmFormat = "| %-40s | %9d | %9.3f | %9.3f | %9.3f | %13.3f | %9d |\n"
-	etmFooter = "| All times in milliseconds.                                                                                           |\n"
-	etmELine  = "+----------------------------------------------------------------------------------------------------------------------+\n"
-	etmString = "Measuring Point %q (%dx / min %.3fms / max %.3fms / avg %.3fms / total %.3fms)"
+	etmTLine  = "+----------------------------------------------------+------------+--------------------+--------------------+--------------------+\n"
+	etmHeader = "| Measuring Point Name                               | Count      | Min Dur            | Max Dur            | Avg Dur            |\n"
+	etmFormat = "| %-50s | %10d | %18s | %18s | %18s |\n"
+	etmString = "Measuring Point %q (%dx / min %s / max %s / avg %s)"
 
-	ssiTLine  = "+------------------------------------------+-----------+---------------+---------------+---------------+---------------+\n"
-	ssiHeader = "| Name                                     | Count     | Act Value     | Min Value     | Max Value     | Avg Value     |\n"
-	ssiFormat = "| %-40s | %9d | %13d | %13d | %13d | %13d |\n"
+	ssiTLine  = "+----------------------------------------------------+-----------+---------------+---------------+---------------+---------------+\n"
+	ssiHeader = "| Stay-Set Variable Name                             | Count     | Act Value     | Min Value     | Max Value     | Avg Value     |\n"
+	ssiFormat = "| %-50s | %9d | %13d | %13d | %13d | %13d |\n"
 	ssiString = "Stay-Set Variable %q (%dx / act %d / min %d / max %d / avg %d)"
 
-	dsrTLine  = "+------------------------------------------+---------------------------------------------------------------------------+\n"
-	dsrHeader = "| Name                                     | Value                                                                     |\n"
-	dsrFormat = "| %-40s | %-73s |\n"
+	dsrTLine  = "+----------------------------------------------------+---------------------------------------------------------------------------+\n"
+	dsrHeader = "| Dynamic Status                                     | Value                                                                     |\n"
+	dsrFormat = "| %-50s | %-73s |\n"
 )
 
 const (
-	cmdMeasuringPointRead = iota
+	cmdReset = iota
+	cmdMeasuringPointRead
 	cmdMeasuringPointsMap
 	cmdMeasuringPointsDo
 	cmdStaySetVariableRead
@@ -56,14 +56,14 @@ const (
 // MONITORING
 //--------------------
 
-// Command encapsulated the data for any command.
+// command encapsulated the data for any command.
 type command struct {
 	opCode   int
 	args     interface{}
 	respChan chan interface{}
 }
 
-// The system monitor type.
+// systemMonitor contains all monitored informations.
 type systemMonitor struct {
 	etmData                   map[string]*MeasuringPoint
 	ssiData                   map[string]*StaySetVariable
@@ -72,6 +72,36 @@ type systemMonitor struct {
 	valueChan                 chan *value
 	retrieverRegistrationChan chan *retrieverRegistration
 	commandChan               chan *command
+}
+
+// etmIds returns the ETM identifiers as sorted slice.
+func (m *systemMonitor) etmIds() []string {
+	ids := []string{}
+	for id := range m.etmData {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// ssiIds returns the SSI identifiers as sorted slice.
+func (m *systemMonitor) ssiIds() []string {
+	ids := []string{}
+	for id := range m.ssiData {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// dsrIds returns the DSR identifiers as sorted slice.
+func (m *systemMonitor) dsrIds() []string {
+	ids := []string{}
+	for id := range m.dsrData {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // monitor is the one global monitor instance.
@@ -135,27 +165,19 @@ func MeasuringPointsDo(f func(*MeasuringPoint)) {
 // MeasuringPointsWrite prints the measuring points for which
 // the passed function returns true to the passed writer.
 func MeasuringPointsWrite(w io.Writer, ff func(*MeasuringPoint) bool) {
-	pf := func(d time.Duration) float64 { return float64(d) / 1000000.0 }
-	// Header.
 	fmt.Fprint(w, etmTLine)
 	fmt.Fprint(w, etmHeader)
 	fmt.Fprint(w, etmTLine)
-	// Body.
 	lines := MeasuringPointsMap(func(mp *MeasuringPoint) interface{} {
 		if ff(mp) {
-			ops := 1e9 / mp.AvgDuration
-			return fmt.Sprintf(etmFormat, mp.Id, mp.Count, pf(mp.MinDuration), pf(mp.MaxDuration),
-				pf(mp.AvgDuration), pf(mp.TtlDuration), ops)
+			return fmt.Sprintf(etmFormat, mp.Id, mp.Count, mp.MinDuration, mp.MaxDuration, mp.AvgDuration)
 		}
 		return nil
 	})
 	for _, line := range lines {
 		fmt.Fprint(w, line)
 	}
-	// Footer.
 	fmt.Fprint(w, etmTLine)
-	fmt.Fprint(w, etmFooter)
-	fmt.Fprint(w, etmELine)
 }
 
 // MeasuringPointsPrintAll prints all measuring points
@@ -166,7 +188,17 @@ func MeasuringPointsPrintAll() {
 
 // SetVariable sets a value of a stay-set variable.
 func SetVariable(id string, v int64) {
-	monitor.valueChan <- &value{id, v}
+	monitor.valueChan <- &value{id, true, v}
+}
+
+// IncrVariable increases a variable.
+func IncrVariable(id string) {
+	monitor.valueChan <- &value{id, false, 1}
+}
+
+// DecrVariable decreases a variable.
+func DecrVariable(id string) {
+	monitor.valueChan <- &value{id, false, -1}
 }
 
 // ReadVariable returns the stay-set variable for an id.
@@ -200,11 +232,9 @@ func StaySetVariablesDo(f func(*StaySetVariable)) {
 // StaySetVariablesWrite prints the stay-set variables for which
 // the passed function returns true to the passed writer.
 func StaySetVariablesWrite(w io.Writer, ff func(*StaySetVariable) bool) {
-	// Header.
 	fmt.Fprint(w, ssiTLine)
 	fmt.Fprint(w, ssiHeader)
 	fmt.Fprint(w, ssiTLine)
-	// Body.
 	lines := StaySetVariablesMap(func(ssv *StaySetVariable) interface{} {
 		if ff(ssv) {
 			return fmt.Sprintf(ssiFormat, ssv.Id, ssv.Count, ssv.ActValue, ssv.MinValue, ssv.MaxValue, ssv.AvgValue)
@@ -215,7 +245,6 @@ func StaySetVariablesWrite(w io.Writer, ff func(*StaySetVariable) bool) {
 	for _, line := range lines {
 		fmt.Fprint(w, line)
 	}
-	// Footer.
 	fmt.Fprint(w, ssiTLine)
 }
 
@@ -261,11 +290,9 @@ func DynamicStatusValuesDo(f func(string, string)) {
 // DynamicStatusValuesWrite prints the status values for which
 // the passed function returns true to the passed writer.
 func DynamicStatusValuesWrite(w io.Writer, ff func(string, string) bool) {
-	// Header.
 	fmt.Fprint(w, dsrTLine)
 	fmt.Fprint(w, dsrHeader)
 	fmt.Fprint(w, dsrTLine)
-	// Body.
 	lines := DynamicStatusValuesMap(func(id, dsv string) interface{} {
 		if ff(id, dsv) {
 			return fmt.Sprintf(dsrFormat, id, dsv)
@@ -276,13 +303,18 @@ func DynamicStatusValuesWrite(w io.Writer, ff func(string, string) bool) {
 	for _, line := range lines {
 		fmt.Fprint(w, line)
 	}
-	// Footer.
 	fmt.Fprint(w, dsrTLine)
 }
 
 // DynamicStatusValuesPrintAll prints all status values to STDOUT.
 func DynamicStatusValuesPrintAll() {
 	DynamicStatusValuesWrite(os.Stdout, func(id, dsv string) bool { return true })
+}
+
+// Reset clears all monitored values.
+func Reset() {
+	cmd := &command{cmdReset, nil, nil}
+	monitor.commandChan <- cmd
 }
 
 // Backend of the system monitor.
@@ -292,19 +324,15 @@ func backend() {
 		case measuring := <-monitor.measuringChan:
 			// Received a new measuring.
 			if mp, ok := monitor.etmData[measuring.id]; ok {
-				// Measuring point found.
 				mp.update(measuring)
 			} else {
-				// New measuring point.
 				monitor.etmData[measuring.id] = newMeasuringPoint(measuring)
 			}
 		case value := <-monitor.valueChan:
 			// Received a new value.
 			if ssv, ok := monitor.ssiData[value.id]; ok {
-				// Variable found.
 				ssv.update(value)
 			} else {
-				// New stay-set variable.
 				monitor.ssiData[value.id] = newStaySetVariable(value)
 			}
 		case registration := <-monitor.retrieverRegistrationChan:
@@ -329,6 +357,11 @@ func backend() {
 // Process a command.
 func processCommand(cmd *command) {
 	switch cmd.opCode {
+	case cmdReset:
+		// Reset monitoring.
+		monitor.etmData = make(map[string]*MeasuringPoint)
+		monitor.ssiData = make(map[string]*StaySetVariable)
+		monitor.dsrData = make(map[string]retrieverWrapper)
 	case cmdMeasuringPointRead:
 		// Read just one measuring point.
 		id := cmd.args.(string)
@@ -344,7 +377,8 @@ func processCommand(cmd *command) {
 		// Map the measuring points.
 		var resp []interface{}
 		f := cmd.args.(func(*MeasuringPoint) interface{})
-		for _, mp := range monitor.etmData {
+		for _, id := range monitor.etmIds() {
+			mp := monitor.etmData[id]
 			v := f(mp)
 			if v != nil {
 				resp = append(resp, v)
@@ -354,7 +388,8 @@ func processCommand(cmd *command) {
 	case cmdMeasuringPointsDo:
 		// Iterate over the measurings.
 		f := cmd.args.(func(*MeasuringPoint))
-		for _, mp := range monitor.etmData {
+		for _, id := range monitor.etmIds() {
+			mp := monitor.etmData[id]
 			f(mp)
 		}
 	case cmdStaySetVariableRead:
@@ -372,7 +407,8 @@ func processCommand(cmd *command) {
 		// Map the stay-set variables.
 		var resp []interface{}
 		f := cmd.args.(func(*StaySetVariable) interface{})
-		for _, ssv := range monitor.ssiData {
+		for _, id := range monitor.ssiIds() {
+			ssv := monitor.ssiData[id]
 			v := f(ssv)
 			if v != nil {
 				resp = append(resp, v)
@@ -382,7 +418,8 @@ func processCommand(cmd *command) {
 	case cmdStaySetVariablesDo:
 		// Iterate over the stay-set variables.
 		f := cmd.args.(func(*StaySetVariable))
-		for _, ssv := range monitor.ssiData {
+		for _, id := range monitor.ssiIds() {
+			ssv := monitor.ssiData[id]
 			f(ssv)
 		}
 	case cmdDynamicStatusRetrieverRead:
@@ -405,7 +442,8 @@ func processCommand(cmd *command) {
 		// retriever functions.
 		var resp []interface{}
 		f := cmd.args.(func(string, string) interface{})
-		for id, dsr := range monitor.dsrData {
+		for _, id := range monitor.dsrIds() {
+			dsr := monitor.dsrData[id]
 			var v interface{}
 			dsv, err := dsr()
 			if err != nil {
@@ -422,7 +460,8 @@ func processCommand(cmd *command) {
 		// Iterate over the return values of the
 		// dynamic status retriever functions.
 		f := cmd.args.(func(string, string))
-		for id, dsr := range monitor.dsrData {
+		for _, id := range monitor.dsrIds() {
+			dsr := monitor.dsrData[id]
 			dsv, err := dsr()
 			if err != nil {
 				f(id, err.Error())
@@ -459,7 +498,6 @@ type MeasuringPoint struct {
 	Count       int64
 	MinDuration time.Duration
 	MaxDuration time.Duration
-	TtlDuration time.Duration
 	AvgDuration time.Duration
 }
 
@@ -471,7 +509,6 @@ func newMeasuringPoint(m *Measuring) *MeasuringPoint {
 		Count:       1,
 		MinDuration: duration,
 		MaxDuration: duration,
-		TtlDuration: duration,
 		AvgDuration: duration,
 	}
 	return mp
@@ -480,6 +517,7 @@ func newMeasuringPoint(m *Measuring) *MeasuringPoint {
 // Update a measuring point with a measuring.
 func (mp *MeasuringPoint) update(m *Measuring) {
 	duration := m.endTime.Sub(m.startTime)
+	average := mp.AvgDuration.Nanoseconds()
 	mp.Count++
 	if mp.MinDuration > duration {
 		mp.MinDuration = duration
@@ -487,21 +525,19 @@ func (mp *MeasuringPoint) update(m *Measuring) {
 	if mp.MaxDuration < duration {
 		mp.MaxDuration = duration
 	}
-	mp.TtlDuration += duration
-	mp.AvgDuration = time.Duration(mp.TtlDuration.Nanoseconds() / mp.Count)
+	mp.AvgDuration = time.Duration((average + duration.Nanoseconds()) / 2)
 }
 
 // String implements the Stringer interface.
 func (mp MeasuringPoint) String() string {
-	pf := func(d time.Duration) float64 { return float64(d) / 1000000.0 }
-	return fmt.Sprintf(etmString, mp.Id, mp.Count, pf(mp.MinDuration), pf(mp.MaxDuration),
-		pf(mp.AvgDuration), pf(mp.TtlDuration))
+	return fmt.Sprintf(etmString, mp.Id, mp.Count, mp.MinDuration, mp.MaxDuration, mp.AvgDuration)
 }
 
-// value stores a stay-set variable with a given id.
+// value represents the change or retrieval of a stay-set variable.
 type value struct {
-	id    string
-	value int64
+	id       string
+	absolute bool
+	value    int64
 }
 
 // StaySetVariable contains the cumulated values
@@ -532,7 +568,11 @@ func newStaySetVariable(v *value) *StaySetVariable {
 // Update a stay-set variable with a value.
 func (ssv *StaySetVariable) update(v *value) {
 	ssv.Count++
-	ssv.ActValue = v.value
+	if v.absolute {
+		ssv.ActValue = v.value
+	} else {
+		ssv.ActValue += v.value
+	}
 	ssv.total += v.value
 	if ssv.MinValue > ssv.ActValue {
 		ssv.MinValue = ssv.ActValue

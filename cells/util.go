@@ -12,9 +12,196 @@ package cells
 //--------------------
 
 import (
-	"sort"
+	"code.google.com/p/tcgl/identifier"
+	"fmt"
+	"sync"
 	"time"
 )
+
+//--------------------
+// IDENTIFIER
+//--------------------
+
+// Id is used to identify context values and cells.
+type Id string
+
+// NewId generates an identifier based on the given parts.
+func NewId(parts ...interface{}) Id {
+	return Id(identifier.Identifier(parts...))
+}
+
+//--------------------
+// CELL MAP
+//--------------------
+
+// cellMap is a map from id to cells for subscriptions and
+// subscribers.
+type cellMap map[Id]*cell
+
+// subset returns a cell map containing the cell with the given ids.
+func (cm cellMap) subset(ids ...Id) (cellMap, error) {
+	scm := make(cellMap)
+	for _, id := range ids {
+		c, ok := cm[id]
+		if !ok {
+			return nil, CellDoesNotExistError{id}
+		}
+		scm[id] = c
+	}
+	return scm, nil
+}
+
+//--------------------
+// CELL MESSAGE QUEUE
+//--------------------
+
+// cellMessage is a message that's handled by the cells 
+// backend loops.
+type cellMessage struct {
+	event Event
+	cells cellMap
+	add   bool
+}
+
+// String returns a readable representation of the message.
+func (m cellMessage) String() string {
+	ids := []string{}
+	for id := range m.cells {
+		ids = append(ids, string(id))
+	}
+	return fmt.Sprintf("<%v %v %v>", EventString(m.event), ids, m.add)
+}
+
+// cellMessageQueue provides an unlimitted message queue for the cells.
+type cellMessageQueue struct {
+	cond   *sync.Cond
+	buffer []*cellMessage
+}
+
+// newCellMessageQueue creates an empty message queue.
+func newCellMessageQueue() *cellMessageQueue {
+	var locker sync.Mutex
+	return &cellMessageQueue{sync.NewCond(&locker), make([]*cellMessage, 0)}
+}
+
+// push appends a new message to the queue.
+func (q *cellMessageQueue) push(event Event, cells cellMap, add bool) error {
+	q.cond.L.Lock()
+	defer q.cond.L.Unlock()
+	if q.buffer == nil {
+		return QueueClosedError{}
+	}
+	q.buffer = append(q.buffer, &cellMessage{event, cells, add})
+	q.cond.Signal()
+	return nil
+}
+
+// pull retrieves a message out of the queue. If it's empty pull
+// is waiting.
+func (q *cellMessageQueue) pull() (msg *cellMessage) {
+	q.cond.L.Lock()
+	defer q.cond.L.Unlock()
+	for {
+		if len(q.buffer) == 0 {
+			q.cond.Wait()
+		} else {
+			msg = q.buffer[0]
+			q.buffer = q.buffer[1:]
+			break
+		}
+	}
+	return
+}
+
+// close tells the queue to stop working.
+func (q *cellMessageQueue) close() {
+	q.cond.L.Lock()
+	defer q.cond.L.Unlock()
+	q.buffer = nil
+}
+
+//--------------------
+// CONTEXT
+//--------------------
+
+// Context allows a number of coherent event processings to store
+// and retrieves values useful for an event emitter and wait for all
+// cells to end processing their events in this context.
+type Context struct {
+	mutex           sync.RWMutex
+	values          map[Id]interface{}
+	activityCounter int
+	doneChan        chan bool
+}
+
+// newContext creates a new event processing context.
+func newContext() *Context {
+	return &Context{
+		values:          make(map[Id]interface{}),
+		activityCounter: 1,
+		doneChan:        make(chan bool, 1),
+	}
+}
+
+// Set a value in the context.
+func (c *Context) Set(key Id, value interface{}) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.values[key] = value
+}
+
+// Get the value of 'key'.
+func (c *Context) Get(key Id) (interface{}, error) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	v := c.values[key]
+	if v == nil {
+		return nil, fmt.Errorf("no context value for %q", key)
+	}
+	return v, nil
+}
+
+// Do iterates over all stored values and calls the passed function for each pair.
+func (c *Context) Do(f func(key Id, value interface{})) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	for k, v := range c.values {
+		f(k, v)
+	}
+}
+
+// incrActivity indicates, that one more cell is working in the context.
+func (c *Context) incrActivity() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.activityCounter++
+}
+
+// decrActivity indicates, that one more cell has stopped processing an event
+// in the context. If the counter is down to zero the context signals that all
+// work is done.
+func (c *Context) decrActivity() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.activityCounter--
+	if c.activityCounter <= 0 {
+		select {
+		case c.doneChan <- true:
+		default:
+		}
+	}
+}
+
+// Wait lets a caller wait until the processing of the context is done.
+func (c *Context) Wait(timeout time.Duration) error {
+	select {
+	case <-c.doneChan:
+		return nil
+	case <-time.After(timeout):
+		return fmt.Errorf("timeout during context wait")
+	}
+	return nil
+}
 
 //--------------------
 // TICKER
@@ -22,16 +209,16 @@ import (
 
 // ticker provides periodic events raised at a defined id.
 type ticker struct {
-	env *Environment
-	id string
-	raiseId string
-	period time.Duration
+	env      *Environment
+	id       Id
+	emitId   Id
+	period   time.Duration
 	stopChan chan bool
 }
 
 // startTicker starts a new ticker in the background.
-func startTicker(env *Environment, id, raiseId string, period time.Duration) *ticker {
-	t := &ticker{env, id, raiseId, period, make(chan bool)}
+func startTicker(env *Environment, id, emitId Id, period time.Duration) *ticker {
+	t := &ticker{env, id, emitId, period, make(chan bool)}
 	go t.backend()
 	return t
 }
@@ -46,7 +233,7 @@ func (t *ticker) backend() {
 	for {
 		select {
 		case <-time.After(t.period):
-			t.env.Raise(t.raiseId, NewTickerEvent(t.id))
+			t.env.Emit(t.emitId, NewTickerEvent(t.id))
 		case <-t.stopChan:
 			return
 		}
@@ -55,20 +242,20 @@ func (t *ticker) backend() {
 
 // TickerEvent signals a tick to ticker subscribers.
 type TickerEvent struct {
-	id      string
+	id      Id
 	time    time.Time
 	context *Context
 }
 
 // NewTickerEvent creates a new ticker event instance with a 
 // given id and the current time.
-func NewTickerEvent(id string) *TickerEvent {
+func NewTickerEvent(id Id) *TickerEvent {
 	return &TickerEvent{id, time.Now(), nil}
 }
 
 // Topic returns the topic of the event, here "ticker([id])".
 func (te TickerEvent) Topic() string {
-	return "ticker(" + te.id + ")"
+	return fmt.Sprintf("ticker(%s)", te.id)
 }
 
 // Payload returns the payload of the event, here the time in
@@ -88,79 +275,101 @@ func (te *TickerEvent) SetContext(c *Context) {
 }
 
 //--------------------
-// CELL ASSIGNMENTS
+// HELPER FUNCTIONS
 //--------------------
 
-// assignments manages assignments of one cell id to 
-// many (subscribers / subscriptions).
-type assignments map[string][]string
-
-// add some assignments between cells.
-func (a assignments) add(eid string, aids ...string) {
-	// Get list of ids.
-	ids := a[eid]
-	if ids == nil {
-		ids = []string{}
+// EventString returns an event as a readable string.
+func EventString(e Event) string {
+	if e == nil {
+		return "none"
 	}
-	// Check and append them.
-	tmp := map[string]struct{}{}
-	for _, id := range ids {
-		tmp[id] = struct{}{}
-	}
-	for _, id := range aids {
-		tmp[id] = struct{}{}
-	}
-	ids = []string{}
-	for id, _ := range tmp {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	a[eid] = ids
+	return fmt.Sprintf("<event topic: %q payload: %+v>", e.Topic(), e.Payload())
 }
 
-// remove some assignments between cells.
-func (a assignments) remove(eid string, rids ...string) {
-	// Get list of ids.
-	ids := a[eid]
-	if ids == nil {
-		return
-	}
-	// Check and remove them.
-	tmp := map[string]struct{}{}
-	for _, id := range ids {
-		tmp[id] = struct{}{}
-	}
-	for _, id := range rids {
-		delete(tmp, id)
-	}
-	ids = []string{}
-	for id, _ := range tmp {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	a[eid] = ids
+//--------------------
+// ERRORS
+//--------------------
+
+// CellInitError will be returned if a cell behaviors init method
+// returns an error.
+type CellInitError struct {
+	Id  Id
+	Err error
 }
 
-// all returns all assigned ids to an id.
-func (a assignments) all(id string) []string {
-	if ids, ok := a[id]; ok {
-		return ids
-	}
-	return []string{}
+// Error returns the error as string.
+func (e CellInitError) Error() string {
+	return fmt.Sprintf("cell %q can't initialize: %v", e.Id, e.Err)
 }
 
-// drop removes all assignments for one id.
-func (a assignments) drop(id string) {
-	delete(a, id)
+// IsCellInitError checks if an error is a cell init error.
+func IsCellInitError(err error) bool {
+	_, ok := err.(CellInitError)
+	return ok
 }
 
-// dropAll drops the cell id from all assignments.
-func (a assignments) dropAll(id string, da assignments) {
-	if aids, ok := a[id]; ok {
-		for _, aid := range aids {
-			da.remove(aid, id)
-		}
-	}
+// CellAlreadyExistsError will be returned if a cell already exists.
+type CellAlreadyExistsError struct {
+	Id Id
+}
+
+// Error returns the error as string.
+func (e CellAlreadyExistsError) Error() string {
+	return fmt.Sprintf("cell %q already exists", e.Id)
+}
+
+// IsCellAlreadyExistsError checks if an error is a cell already exists error.
+func IsCellAlreadyExistsError(err error) bool {
+	_, ok := err.(CellAlreadyExistsError)
+	return ok
+}
+
+// CellDoesNotExistError will be returned if a cell does not exist.
+type CellDoesNotExistError struct {
+	Id Id
+}
+
+// Error returns the error as string.
+func (e CellDoesNotExistError) Error() string {
+	return fmt.Sprintf("cell %q does not exist", e.Id)
+}
+
+// IsCellDoesNotExistError checks if an error is a cell does not exist error.
+func IsCellDoesNotExistError(err error) bool {
+	_, ok := err.(CellDoesNotExistError)
+	return ok
+}
+
+// CellStoppedError will be returned if a subscribed cell has been
+// stopped and so removed from a cell subscription map.
+type CellStoppedError struct {
+	Id Id
+}
+
+// Error returns the error as string.
+func (e CellStoppedError) Error() string {
+	return fmt.Sprintf("cell %q has been stopped", e.Id)
+}
+
+// IsCellStoppedError checks if an error is a cell stopped error.
+func IsCellStoppedError(err error) bool {
+	_, ok := err.(CellStoppedError)
+	return ok
+}
+
+// QueueClosedError will be returned if a cell message queue is
+// closed and a message shall be pushed or pulled.
+type QueueClosedError struct{}
+
+// Error returns the error as string.
+func (e QueueClosedError) Error() string {
+	return fmt.Sprintf("cell message queue has been closed")
+}
+
+// IsQueueClosedError checks if an error is a queue closed error.
+func IsQueueClosedError(err error) bool {
+	_, ok := err.(QueueClosedError)
+	return ok
 }
 
 // EOF

@@ -13,6 +13,7 @@ package cells
 
 import (
 	"code.google.com/p/tcgl/applog"
+	"code.google.com/p/tcgl/config"
 	"code.google.com/p/tcgl/identifier"
 	"code.google.com/p/tcgl/monitoring"
 	"fmt"
@@ -22,88 +23,11 @@ import (
 )
 
 //--------------------
-// BASIC INTERFACES AND TYPES
+// EVENT
 //--------------------
 
-// Context allows a number of coherent event processings to store
-// values useful for an event emitter.
-type Context struct {
-	mutex           sync.RWMutex
-	values          map[string]interface{}
-	activityCounter int
-	doneChan        chan bool
-}
-
-// newContext creates a new event processing context.
-func newContext() *Context {
-	return &Context{
-		values:          make(map[string]interface{}),
-		activityCounter: 0,
-		doneChan:        make(chan bool, 1),
-	}
-}
-
-// Set a value in the context.
-func (c *Context) Set(key string, value interface{}) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	c.values[key] = value
-}
-
-// Get the value of 'key'.
-func (c Context) Get(key string) (interface{}, error) {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-	v := c.values[key]
-	if v == nil {
-		return nil, fmt.Errorf("no context value for %q", key)
-	}
-	return v, nil
-}
-
-// Do iterates over all stored values and calls the passed function for each pair.
-func (c Context) Do(f func(key string, value interface{})) {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-	for k, v := range c.values {
-		f(k, v)
-	}
-}
-
-// incrActivity indicates, that one more cell is working in the context.
-func (c *Context) incrActivity() {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	c.activityCounter++
-}
-
-// decrActivity indicates, that one more cell has stopped processing an event
-// in the context. If the counter is down to zero the context signals that all
-// work is done.
-func (c *Context) decrActivity() {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	c.activityCounter--
-	if c.activityCounter <= 0 {
-		select {
-		case c.doneChan <- true:
-		default:
-		}
-	}
-}
-
-// Wait lets a caller wait until the processing of the context is done.
-func (c Context) Wait(d time.Duration) error {
-	select {
-	case <-c.doneChan:
-		return nil
-	case <-time.After(d):
-		return fmt.Errorf("timeout during context wait")
-	}
-	return nil
-}
-
-// Event is anything that has a topic and a payload.
+// Event is anything that has a topic and a payload. Data to and
+// between cells is passed as event.
 type Event interface {
 	// Topic returns the topic of the simple event.
 	Topic() string
@@ -148,256 +72,439 @@ func (se *simpleEvent) SetContext(c *Context) {
 	se.context = c
 }
 
-// EventChannel is a channel to pass events to other handlers.
-type EventChannel chan Event
+//--------------------
+// BEHAVIOR
+//--------------------
 
 // Behavior is the interface that has to be implemented
 // of those behaviors which can be plugged into an environment
 // for the real event processing.
 type Behavior interface {
-	Init(env *Environment, id string) error
-	ProcessEvent(e Event, emitChan EventChannel)
+	// Init the deployed behavior inside an environment.
+	Init(env *Environment, id Id) error
+	// ProcessEvent processes an event and can emit own events.
+	ProcessEvent(e Event, emitter EventEmitter)
+	// Recover from an error during the processing of event e.
 	Recover(r interface{}, e Event)
-	Stop() error
+	// Stop the behavior.
+	Stop()
+}
+
+// PoolableBehavior is the interface for behaviors which want
+// to be pooled.
+type PoolableBehavior interface {
+	PoolConfig() (poolSize int, stateful bool)
+}
+
+// BehaviorFactory is a function that creates a behavior instance.
+type BehaviorFactory func() Behavior
+
+// BehaviorFactoryMap is a map of ids to behavior factories.
+type BehaviorFactoryMap map[Id]BehaviorFactory
+
+// poolBehavior manages a pool of behaviors and distributes the
+// received events round robin.
+type poolBehavior struct {
+	cellPool chan *cell
+}
+
+// newPoolBehavior creates a new pool behavior with the passed size and
+// the already created first behavior instance. It then creates the rest 
+// of the behavior instances.
+func newPoolBehavior(env *Environment, id Id, poolSize int, stateful bool, b Behavior, bf BehaviorFactory) (Behavior, error) {
+	pb := &poolBehavior{make(chan *cell, poolSize)}
+	c, err := newCell(env, id, b)
+	if err != nil {
+		return nil, err
+	}
+	pb.cellPool <- c
+	for i := 1; i < poolSize; i++ {
+		if stateful {
+			// Stateful, so multiple instances.
+			c, err = newCell(env, id, bf())
+		} else {
+			// Not stateful, the pool is sharing only one instance.
+			c, err = newCell(env, id, b)
+		}
+		if err != nil {
+			return nil, err
+		}
+		pb.cellPool <- c
+	}
+	return pb, nil
+}
+
+// Init the behavior by creating the cells for the buffer.
+func (b *poolBehavior) Init(env *Environment, id Id) error {
+	return nil
+}
+
+// ProcessEvent processes an event.
+func (b *poolBehavior) ProcessEvent(e Event, emitter EventEmitter) {
+	c := <-b.cellPool
+	c.processEvent(e)
+	b.cellPool <- c
+}
+
+// Recover from an error.
+func (b *poolBehavior) Recover(err interface{}, e Event) {}
+
+// Stop the behavior, which means to stop all pooled cells.
+func (b *poolBehavior) Stop() {
+	for i := 0; i < len(b.cellPool); i++ {
+		c := <-b.cellPool
+		c.stop()
+	}
+	close(b.cellPool)
 }
 
 //--------------------
 // ENVIRONMENT
 //--------------------
 
+// SubscriptionMap is a map of emitter ids to subscribed ids.
+type SubscriptionMap map[Id][]Id
+
 // Environment defines a common set of cells.
 type Environment struct {
 	mutex         sync.RWMutex
-	id            string
-	cells         map[string]*cell
-	subscribers   assignments
-	subscriptions assignments
-	tickers       map[string]*ticker
+	id            Id
+	configuration *config.Configuration
+	cells         cellMap
+	tickers       map[Id]*ticker
 }
 
 // NewEnvironment creates a new environment.
-func NewEnvironment(id string) *Environment {
+func NewEnvironment(id Id) *Environment {
 	env := &Environment{
-		id:            id,
-		cells:         make(map[string]*cell),
-		subscribers:   make(assignments),
-		subscriptions: make(assignments),
-		tickers:       make(map[string]*ticker),
+		id:      id,
+		cells:   make(cellMap),
+		tickers: make(map[Id]*ticker),
 	}
 	runtime.SetFinalizer(env, (*Environment).Shutdown)
 	return env
 }
 
-// AddCell adds a handler with a given id and an input queue length.
-func (env *Environment) AddCell(id string, b Behavior, ql int) (Behavior, error) {
+// SetConfiguration sets the configuration of the environment.
+func (env *Environment) SetConfiguration(configuration *config.Configuration) {
+	env.configuration = configuration
+}
+
+// Configuration returns the configuration of the environment.
+func (env *Environment) Configuration() *config.Configuration {
+	return env.configuration
+}
+
+// AddCell adds a cell with a given id and its behavior factory.
+func (env *Environment) AddCell(id Id, bf BehaviorFactory) (Behavior, error) {
 	env.mutex.Lock()
 	defer env.mutex.Unlock()
-	// Check registry before adding.
-	if _, ok := env.cells[id]; ok {
-		return nil, fmt.Errorf("cell behavior with id %q already added", id)
+	return env.startCell(id, bf)
+}
+
+// AddCell adds a number of cells with a given ids and their behavior factories.
+func (env *Environment) AddCells(bfm BehaviorFactoryMap) error {
+	env.mutex.Lock()
+	defer env.mutex.Unlock()
+	for id, bf := range bfm {
+		if _, err := env.startCell(id, bf); err != nil {
+			return err
+		}
 	}
-	c, err := newCell(env, id, b, ql)
+	return nil
+}
+
+// startCell starts the cell with the behavior returned by the behavior factory.
+func (env *Environment) startCell(id Id, bf BehaviorFactory) (Behavior, error) {
+	if _, ok := env.cells[id]; ok {
+		return nil, CellAlreadyExistsError{id}
+	}
+	// Check poolability.
+	behavior := bf()
+	if pb, ok := behavior.(PoolableBehavior); ok {
+		var err error
+		poolSize, stateful := pb.PoolConfig()
+		behavior, err = newPoolBehavior(env, id, poolSize, stateful, behavior, bf)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// Create cell.
+	c, err := newCell(env, id, behavior)
 	if err != nil {
 		return nil, err
 	}
 	env.cells[id] = c
-	return b, nil
+	return behavior, nil
 }
 
-// RemoveCell removes the behavior with the given id. If it doesn't
-// exist no error is returned.
-func (env *Environment) RemoveCell(id string) error {
+// RemoveCell removes the cell with the given id.
+func (env *Environment) RemoveCell(id Id) {
 	env.mutex.Lock()
 	defer env.mutex.Unlock()
-	// Retrieve and remove it with all subscriptions.
 	if c, ok := env.cells[id]; ok {
-		env.subscribers.drop(id)
-		env.subscriptions.dropAll(id, env.subscribers)
 		delete(env.cells, id)
-		return c.stop()
+		c.stop()
 	}
-	return nil
 }
 
-// Cell returns the behavior with the id or nil (take care).
-func (env *Environment) Cell(id string) (Behavior, error) {
+// HasCell returns true if the cell with the given id exists.
+func (env *Environment) HasCell(id Id) bool {
 	env.mutex.RLock()
 	defer env.mutex.RUnlock()
-	// Retrieve the cell first
+	_, ok := env.cells[id]
+	return ok
+}
+
+// CellBehavior returns the behavior with the id or nil (take care).
+func (env *Environment) CellBehavior(id Id) (Behavior, error) {
+	env.mutex.RLock()
+	defer env.mutex.RUnlock()
 	if c, ok := env.cells[id]; ok {
 		return c.behavior, nil
 	}
-	return nil, fmt.Errorf("cell behavior with id %q does not exist")
+	return nil, CellDoesNotExistError{id}
 }
 
 // Subscribe assigns cells as receivers of the emitted 
 // events of the first cell.
-func (env *Environment) Subscribe(eid string, sids ...string) error {
-	env.mutex.Lock()
-	defer env.mutex.Unlock()
-	// Check both ids.
-	if env.cells[eid] == nil {
-		return fmt.Errorf("emitter cell %q does not exist", eid)
-	}
-	for _, sid := range sids {
-		if env.cells[sid] == nil {
-			return fmt.Errorf("subscriber cell %q does not exist", sid)
+func (env *Environment) Subscribe(emitterId Id, subscriberIds ...Id) error {
+	env.mutex.RLock()
+	defer env.mutex.RUnlock()
+	return env.subscribe(emitterId, subscriberIds...)
+}
+
+// SubscribeAll assigns all subscribers to the emitters of the map.
+func (env *Environment) SubscribeAll(sm SubscriptionMap) error {
+	env.mutex.RLock()
+	defer env.mutex.RUnlock()
+	for emitterId, subscriberIds := range sm {
+		if err := env.subscribe(emitterId, subscriberIds...); err != nil {
+			return err
 		}
 	}
-	// Store assignments in both directions.
-	env.subscribers.add(eid, sids...)
-	for _, sid := range sids {
-		env.subscriptions.add(sid, eid)
-	}
 	return nil
+}
+
+// subscribe performs the subscription in a read-locked environment state.
+func (env *Environment) subscribe(emitterId Id, subscriberIds ...Id) error {
+	if c, ok := env.cells[emitterId]; ok {
+		subscriberCells, err := env.cells.subset(subscriberIds...)
+		if err != nil {
+			return err
+		}
+		return c.changeSubscriptions(true, subscriberCells)
+	}
+	return CellDoesNotExistError{emitterId}
 }
 
 // Unsubscribe removes the assignment of emitting und subscribed cells. 
-func (env *Environment) Unsubscribe(eid string, sids ...string) error {
-	env.mutex.Lock()
-	defer env.mutex.Unlock()
-	// Check both ids.
-	if env.cells[eid] == nil {
-		return fmt.Errorf("emitter cell %q does not exist", eid)
-	}
-	for _, sid := range sids {
-		if env.cells[sid] == nil {
-			return fmt.Errorf("subscriber cell %q does not exist", sid)
-		}
-	}
-	// Remove assignments in both directions.
-	env.subscribers.remove(eid, sids...)
-	for _, sid := range sids {
-		env.subscriptions.remove(sid, eid)
-	}
-	return nil
-}
-
-// Raise raises an event to the cell for a given id.
-func (env *Environment) Raise(id string, e Event) (*Context, error) {
+func (env *Environment) Unsubscribe(emitterId Id, unsubscriberIds ...Id) error {
 	env.mutex.RLock()
 	defer env.mutex.RUnlock()
-	// Retrieve the cell.
-	if c, ok := env.cells[id]; ok {
-		// Check the context.
-		if e.Context() == nil {
-			e.SetContext(newContext())
+	if c, ok := env.cells[emitterId]; ok {
+		unsubscriberCells, err := env.cells.subset(unsubscriberIds...)
+		if err != nil {
+			return err
 		}
-		c.processEvent(e)
-		return e.Context(), nil
+		return c.changeSubscriptions(false, unsubscriberCells)
 	}
-	return nil, fmt.Errorf("cell %q not found", id)
+	return CellDoesNotExistError{emitterId}
 }
 
-// RaiseSimpleEvent is a convenience method raising a simple event in one call.
-func (env *Environment) RaiseSimpleEvent(id, t string, p interface{}) (*Context, error) {
-	return env.Raise(id, NewSimpleEvent(t, p))
-}
-
-// raiseSubscribers raises an event to the subscribers of a cell. If the 
-// event has a target only this cell will receive the event, otherwise all.
-func (env *Environment) raiseSubscribers(id string, e Event) {
-	env.mutex.RLock()
-	defer env.mutex.RUnlock()
-	// Raise event.
-	for _, sid := range env.subscribers.all(id) {
-		if c, ok := env.cells[sid]; ok {
-			c.processEvent(e)
+// Emit emits an event to the cell with a given id and returns its
+// (possibly new created) context.
+func (env *Environment) Emit(id Id, e Event) (ctx *Context, err error) {
+	defer func() {
+		if err != nil {
+			applog.Errorf("can't emit topic %q to %q: %v", e.Topic(), id, err)
+		}
+	}()
+	sleep := 5
+	for {
+		env.mutex.RLock()
+		c, ok := env.cells[id]
+		env.mutex.RUnlock()
+		if ok {
+			if e.Context() == nil {
+				e.SetContext(newContext())
+			}
+			e.Context().incrActivity()
+			if err := c.processEvent(e); err != nil {
+				return nil, err
+			}
+			return e.Context(), nil
+		}
+		// Wait an increasing time befor retry, max 5 seconds.
+		if sleep <= 5000 {
+			time.Sleep(time.Duration(sleep) * time.Millisecond)
+			sleep *= 10
 		}
 	}
+	return nil, CellDoesNotExistError{id}
+}
+
+// EmitSimple is a convenience method emitting a simple event in one call.
+func (env *Environment) EmitSimple(id Id, t string, p interface{}) (*Context, error) {
+	return env.Emit(id, NewSimpleEvent(t, p))
 }
 
 // AddTicker adds a new ticker for periodical ticker events with the given
-// id to the raiseId.
-func (env *Environment) AddTicker(id, raiseId string, period time.Duration) error {
+// id to the emitId.
+func (env *Environment) AddTicker(id, emitId Id, period time.Duration) error {
+	env.mutex.Lock()
+	defer env.mutex.Unlock()
 	if _, ok := env.tickers[id]; ok {
 		return fmt.Errorf("ticker with id %q already added", id)
 	}
-	env.tickers[id] = startTicker(env, id, raiseId, period)
+	env.tickers[id] = startTicker(env, id, emitId, period)
 	return nil
 }
 
 // RemoveTicker removes a periodical ticker event.
-func (env *Environment) RemoveTicker(id string) error {
+func (env *Environment) RemoveTicker(id Id) error {
+	env.mutex.Lock()
+	defer env.mutex.Unlock()
 	if ticker, ok := env.tickers[id]; ok {
 		ticker.stop()
 		delete(env.tickers, id)
 		return nil
 	}
-	return fmt.Errorf("ticker with id %q does not exist", id)	
+	return fmt.Errorf("ticker with id %q does not exist", id)
 }
 
 // Shutdown manages the proper finalization of an environment.
 func (env *Environment) Shutdown() error {
-	env.mutex.Lock()
-	defer env.mutex.Unlock()
 	// Stop all tickers.
 	for _, ticker := range env.tickers {
 		ticker.stop()
 	}
 	env.tickers = nil
 	// Stop all cells and delete registry.
-	for id, c := range env.cells {
-		err := c.stop()
-		if err != nil {
-			return fmt.Errorf("shutdown of cell %q failed", id)
-		}
+	for _, c := range env.cells {
+		c.stop()
 	}
 	env.cells = nil
-	env.subscribers = nil
-	env.subscriptions = nil
 	runtime.SetFinalizer(env, nil)
 	return nil
 }
 
 //--------------------
-// CELL 
+// EVENT EMITTER
+//--------------------
+
+// EventEmitter is any type that can be used for emitting events.
+type EventEmitter interface {
+	// Emit emits an event to a number of cells depending on the implementation.
+	Emit(e Event)
+	// EmitSimple emits convieniently a simple event.
+	EmitSimple(topic string, payload interface{})
+}
+
+// cellEventEmitter implements EventEmitter for the processing
+// of an event in a cell.
+type cellEventEmitter struct {
+	cells   cellMap
+	context *Context
+}
+
+// Emit emits an event to the subscribers of a cell. It passes
+// the context to that event.
+func (cee *cellEventEmitter) Emit(e Event) {
+	e.SetContext(cee.context)
+	e.Context().incrActivity()
+	erroneousSubscriberIds := []Id{}
+	for id, sc := range cee.cells {
+		if err := sc.processEvent(e); err != nil {
+			erroneousSubscriberIds = append(erroneousSubscriberIds, id)
+		}
+	}
+	for _, id := range erroneousSubscriberIds {
+		delete(cee.cells, id)
+	}
+}
+
+// EmitSimple emits convieniently a simple event to the subscribers
+// of a cell. It passes the context to that event.
+func (cee *cellEventEmitter) EmitSimple(topic string, payload interface{}) {
+	cee.Emit(NewSimpleEvent(topic, payload))
+}
+
+//--------------------
+// CELL
 //--------------------
 
 // cell for event processing.
 type cell struct {
 	env         *Environment
-	id          string
+	id          Id
 	behavior    Behavior
-	eventChan   EventChannel
+	subscribers cellMap
+	queue       *cellMessageQueue
 	measuringId string
 }
 
 // newCell create a new cell around a behavior.
-func newCell(env *Environment, id string, b Behavior, ql int) (*cell, error) {
+func newCell(env *Environment, id Id, b Behavior) (*cell, error) {
 	c := &cell{
 		env:         env,
 		id:          id,
 		behavior:    b,
-		eventChan:   make(EventChannel, ql),
-		measuringId: identifier.Identifier("cell", env.id, id),
+		subscribers: make(cellMap),
+		queue:       newCellMessageQueue(),
+		measuringId: identifier.Identifier("cells", env.id, "cell", identifier.TypeAsIdentifierPart(b)),
 	}
-	go c.backend()
-	err := b.Init(env, id)
-	if err != nil {
-		return nil, fmt.Errorf("cell behavior init error: %v", err)
+	// Init behavior.
+	if err := b.Init(env, id); err != nil {
+		return nil, CellInitError{id, err}
 	}
+	go c.processLoop()
+	monitoring.IncrVariable(identifier.Identifier("cells", c.env.id, "total-cells"))
+	monitoring.IncrVariable(c.measuringId)
 	return c, nil
 }
 
-// processEvent tells the cell to handle an event.
-func (c *cell) processEvent(e Event) {
-	e.Context().incrActivity()
-	c.eventChan <- e
-}
-
 // stop terminates the cell.
-func (c *cell) stop() error {
-	close(c.eventChan)
-	return c.behavior.Stop()
+func (c *cell) stop() {
+	c.queue.push(nil, nil, false)
 }
 
-// backend function of the cell.
-func (c *cell) backend() {
-	// Main event loop.
-	for e := range c.eventChan {
-		c.process(e)
+// changeSubscriptions tells the cell to change subscribers.
+func (c *cell) changeSubscriptions(add bool, cells cellMap) error {
+	return c.queue.push(nil, cells, add)
+}
+
+// processEvent tells the cell to handle an event.
+func (c *cell) processEvent(e Event) error {
+	return c.queue.push(e, nil, false)
+}
+
+// processLoop is the backend for the processing of events.
+func (c *cell) processLoop() {
+	for {
+		message := c.queue.pull()
+		switch {
+		case message.event != nil:
+			// Process the event.
+			c.process(message.event)
+		case message.cells != nil:
+			// Change the subscriptions.
+			for id, sc := range message.cells {
+				if message.add {
+					c.subscribers[id] = sc
+				} else {
+					delete(c.subscribers, id)
+				}
+			}
+		case message.event == nil && message.cells == nil:
+			// Stop the cell.
+			c.queue.close()
+			break
+		}
 	}
+	monitoring.DecrVariable(c.measuringId)
+	monitoring.DecrVariable(identifier.Identifier("cells", c.env.id, "total-cells"))
+	c.behavior.Stop()
 }
 
 // process encapsulates event processing including error 
@@ -406,25 +513,20 @@ func (c *cell) process(e Event) {
 	// Error recovering.
 	defer func() {
 		if r := recover(); r != nil {
-			applog.Errorf("cells", "cell '%s' has error '%v' after '%v'", c.id, r, e)
+			if e != nil {
+				applog.Errorf("cell %q has error '%v' with event '%+v'", c.id, r, EventString(e))
+
+			} else {
+				applog.Errorf("cell %q has error '%v'", c.id, r)
+			}
 			c.behavior.Recover(r, e)
 		}
 	}()
-	// Create a channel to let the behavior emit
-	// events to the subscribed handlers. Those
-	// will handle it in the background.
-	emitChan := make(EventChannel)
-	defer close(emitChan)
-	go func() {
-		for ee := range emitChan {
-			ee.SetContext(e.Context())
-			c.env.raiseSubscribers(c.id, ee)
-		}
-		e.Context().decrActivity()
-	}()
+	defer e.Context().decrActivity()
 	// Handle the event inside a measuring.
 	measuring := monitoring.BeginMeasuring(c.measuringId)
-	c.behavior.ProcessEvent(e, emitChan)
+	emitter := &cellEventEmitter{c.subscribers, e.Context()}
+	c.behavior.ProcessEvent(e, emitter)
 	measuring.EndMeasuring()
 }
 
