@@ -110,16 +110,16 @@ func generateTestingFailFunc(t *testing.T, fail bool) FailFunc {
 		buffer := &bytes.Buffer{}
 		fmt.Fprintf(buffer, "--------------------------------------------------------------------------------\n")
 		fmt.Fprintf(buffer, "%s:%d: Assert '%s' failed!\n\n", fileName, line, test)
-		fmt.Fprintf(buffer, "Function....: %s()\n", funcName)
+		fmt.Fprintf(buffer, "Function...: %s()\n", funcName)
 		switch test {
 		case True, False, Nil, NotNil, Empty, NotEmpty:
-			fmt.Fprintf(buffer, "Obtained....: %v\n", obtained)
+			fmt.Fprintf(buffer, "Obtained...: %v\n", obtained)
 		case Implementor, Assignable, Unassignable:
-			fmt.Fprintf(buffer, "Obtained....: %v\n", ValueDescription(obtained))
-			fmt.Fprintf(buffer, "Expected....: %v\n", ValueDescription(expected))
+			fmt.Fprintf(buffer, "Obtained...: %v\n", ValueDescription(obtained))
+			fmt.Fprintf(buffer, "Expected...: %v\n", ValueDescription(expected))
 		default:
-			fmt.Fprintf(buffer, "Obtained....: %v\n", obtained)
-			fmt.Fprintf(buffer, "Expected....: %v\n", expected)
+			fmt.Fprintf(buffer, "Obtained...: %v\n", obtained)
+			fmt.Fprintf(buffer, "Expected...: %v\n", expected)
 		}
 		fmt.Fprintf(buffer, "Description: %s\n", msg)
 		fmt.Fprintf(buffer, "--------------------------------------------------------------------------------\n")
