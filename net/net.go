@@ -71,6 +71,8 @@ var mapping = map[string]string{
 	"csisolatin1":     "iso-8859-1",
 }
 
+// CharsetReader implements the charset reader function for the XML decoder.
+// Currently UTF-8 and ISO-8859-1 are supported.
 func CharsetReader(charset string, input io.Reader) (io.Reader, error) {
 	switch mapping[strings.ToLower(charset)] {
 	case "utf-8":
