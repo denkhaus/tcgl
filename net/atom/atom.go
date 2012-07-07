@@ -14,6 +14,7 @@ package atom
 import (
 	"code.google.com/p/tcgl/net"
 	"encoding/xml"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -27,6 +28,16 @@ import (
 const (
 	Version = "1.0"
 	XMLNS   = "http://www.w3.org/2005/Atom"
+
+	TextType  = "text"
+	HTMLType  = "html"
+	XHTMLType = "xhtml"
+
+	AlternateRel = "alternate"
+	EnclosureRel = "enclosure"
+	RelatedRel   = "related"
+	SelfRel      = "self"
+	ViaRel       = "via"
 )
 
 //--------------------
@@ -35,35 +46,129 @@ const (
 
 // Feed is the root element of the document.
 type Feed struct {
-	XMLName      string        `xml:"feed"`
-	XMLNS        string        `xml:"xmlns,attr"`
-	Title        Text          `xml:"title"`
-	Subtitle     Text          `xml:"subtitle,omitempty"`
-	Id           string        `xml:"id"`
-	Updated      string        `xml:"updated"`
-	Author       Author        `xml:"author,omitempty"`
-	Link         Link          `xml:"link,omitempty"`
-	Categories   []Category    `xml:"category,omitempty"`
-	Contributors []Contributor `xml:"contributor,omitempty"`
-	Generator    Generator     `xml:"generator,omitempty"`
-	Icon         string        `xml:"icon,omitempty"`
-	Logo         string        `xml:"logo,omitempty"`
-	Rights       Text          `xml:"rights,omitempty"`
-	Entries      []Entry       `xml:"entry"`
+	XMLName      string         `xml:"feed"`
+	XMLNS        string         `xml:"xmlns,attr"`
+	Id           string         `xml:"id"`
+	Title        *Text          `xml:"title"`
+	Updated      string         `xml:"updated"`
+	Authors      []*Author      `xml:"author,omitempty"`
+	Link         *Link          `xml:"link,omitempty"`
+	Categories   []*Category    `xml:"category,omitempty"`
+	Contributors []*Contributor `xml:"contributor,omitempty"`
+	Generator    *Generator     `xml:"generator,omitempty"`
+	Icon         string         `xml:"icon,omitempty"`
+	Logo         string         `xml:"logo,omitempty"`
+	Rights       *Text          `xml:"rights,omitempty"`
+	Subtitle     *Text          `xml:"subtitle,omitempty"`
+	Entries      []*Entry       `xml:"entry"`
+}
+
+// Validate checks if the feed is valid.
+func (f *Feed) Validate() error {
+	if f.XMLNS != XMLNS {
+		return newInvalidAtomError("feed namespace %q has to be %q", f.XMLNS, XMLNS)
+	}
+	if _, err := url.Parse(f.Id); err != nil {
+		return newInvalidAtomError("feed id is not parsable: %v", err)
+	}
+	if err := validateText("feed title", f.Title, true); err != nil {
+		return err
+	}
+	if _, err := ParseTime(f.Updated); err != nil {
+		return newInvalidAtomError("feed update is not parsable: %v", err)
+	}
+	for _, author := range f.Authors {
+		if err := author.Validate(); err != nil {
+			return err
+		}
+	}
+	if f.Link != nil {
+		if err := f.Link.Validate(); err != nil {
+			return err
+		}
+	}
+	for _, category := range f.Categories {
+		if err := category.Validate(); err != nil {
+			return err
+		}
+	}
+	for _, contributor := range f.Contributors {
+		if err := contributor.Validate(); err != nil {
+			return err
+		}
+	}
+	if f.Generator != nil {
+		if err := f.Generator.Validate(); err != nil {
+			return err
+		}
+	}
+	if err := validateText("feed rights", f.Rights, false); err != nil {
+		return err
+	}
+	if err := validateText("feed subtitle", f.Subtitle, false); err != nil {
+		return err
+	}
+	allEntriesWithAuthor := true
+	for _, entry := range f.Entries {
+		if err := entry.Validate(); err != nil {
+			return err
+		}
+		allEntriesWithAuthor = allEntriesWithAuthor && len(entry.Authors) > 0
+	}
+	if !allEntriesWithAuthor && len(f.Authors) == 0 {
+		return newInvalidAtomError("feed needs at least one author or one or more in each entry")
+	}
+	return nil
 }
 
 // Text contains human-readable text, usually in small quantities. The type 
 // attribute determines how this information is encoded.
 type Text struct {
 	Text string `xml:",chardata"`
+	Src  string `xml:"src,attr,omitempty"`
 	Type string `xml:"type,attr,omitempty"`
+}
+
+// validateText ensures that a text is set if it's mandatory and that
+// the type is correct.
+func validateText(description string, t *Text, mandatory bool) error {
+	if (t == nil || t.Text == "") && mandatory {
+		return newInvalidAtomError("%s must not be missing or empty", description)
+	}
+	if t != nil {
+		if t.Src != "" {
+			if _, err := url.Parse(t.Src); err != nil {
+				return newInvalidAtomError("%s src is not parsable: %v", description, err)
+			}
+		}
+		switch t.Type {
+		case "", TextType, HTMLType, XHTMLType:
+			// OK.
+		default:
+			return newInvalidAtomError("%s has illegal type %q", description, t.Type)
+		}
+	}
+	return nil
 }
 
 // Author names the author of the feed.
 type Author struct {
 	Name  string `xml:"name"`
-	EMail string `xml:"email"`
-	URI   string `xml:"uri"`
+	URI   string `xml:"uri,omitempty"`
+	EMail string `xml:"email,omitempty"`
+}
+
+// Validate checks if a feed author is valid.
+func (a *Author) Validate() error {
+	if a.Name == "" {
+		return newInvalidAtomError("feed author name must not be empty")
+	}
+	if a.URI != "" {
+		if _, err := url.Parse(a.URI); err != nil {
+			return newInvalidAtomError("feed author uri is not parsable:", err)
+		}
+	}
+	return nil
 }
 
 // Link identifies a related web page.
@@ -76,6 +181,22 @@ type Link struct {
 	Length   int    `xml:"lenght,attr,omitempty"`
 }
 
+// Validate checks if the feed link is valid.
+func (l *Link) Validate() error {
+	if _, err := url.Parse(l.HRef); err != nil {
+		return newInvalidAtomError("feed link href is not parsable:", err)
+	}
+	switch l.Rel {
+	case "", AlternateRel, EnclosureRel, RelatedRel, SelfRel, ViaRel:
+		// OK.
+	default:
+		if _, err := url.Parse(l.Rel); err != nil {
+			return newInvalidAtomError("feed link rel is neither predefined nor parsable: %v", err)
+		}
+	}
+	return nil
+}
+
 // Category specifies a category that the feed belongs to.
 type Category struct {
 	Term   string `xml:"term,attr"`
@@ -83,9 +204,30 @@ type Category struct {
 	Label  string `xml:"label,attr,omitempty"`
 }
 
-// Contributor names one contributor to the feed.
+// Validate checks if a feed category is valid.
+func (c *Category) Validate() error {
+	if c.Term == "" {
+		return newInvalidAtomError("feed category term must not be empty")
+	}
+	if c.Scheme != "" {
+		if _, err := url.Parse(c.Scheme); err != nil {
+			return newInvalidAtomError("feed category scheme is not parsable: %v", err)
+		}
+	}
+	return nil
+}
+
+// Contributor names one contributor of the feed.
 type Contributor struct {
-	Names string `xml:"name"`
+	Name string `xml:"name"`
+}
+
+// Validate checks if a feed contributor is valid.
+func (c *Contributor) Validate() error {
+	if c.Name == "" {
+		return newInvalidAtomError("feed contributor name must not be empty")
+	}
+	return nil
 }
 
 // Generator identifies the software used to generate the feed, 
@@ -96,36 +238,146 @@ type Generator struct {
 	Version   string `xml:"version,attr,omitempty"`
 }
 
+// Validate checks if a feed generator is valid.
+func (g *Generator) Validate() error {
+	if g.Generator == "" {
+		return newInvalidAtomError("feed generator must not be empty")
+	}
+	if g.URI != "" {
+		if _, err := url.Parse(g.URI); err != nil {
+			return newInvalidAtomError("feed generator URI is not parsable: %v", err)
+		}
+	}
+	return nil
+}
+
 // Entry defines one feed entry.
 type Entry struct {
-	Id           string        `xml:"id"`
-	Title        Text          `xml:"title"`
-	Updated      string        `xml:"updated"`
-	Author       Author        `xml:"author,omitempty"`
-	Content      Text          `xml:"content,omitempty"`
-	Link         Link          `xml:"link,omitempty"`
-	Summary      Text          `xml:"subtitle,omitempty"`
-	Categories   []Category    `xml:"category,omitempty"`
-	Contributors []Contributor `xml:"contributor,omitempty"`
-	Published    string        `xml:"published,omitempty"`
-	Rights       Text          `xml:"rights,omitempty"`
+	Id           string         `xml:"id"`
+	Title        *Text          `xml:"title"`
+	Updated      string         `xml:"updated"`
+	Authors      []*Author      `xml:"author,omitempty"`
+	Content      *Text          `xml:"content,omitempty"`
+	Link         *Link          `xml:"link,omitempty"`
+	Summary      *Text          `xml:"subtitle,omitempty"`
+	Categories   []*Category    `xml:"category,omitempty"`
+	Contributors []*Contributor `xml:"contributor,omitempty"`
+	Published    string         `xml:"published,omitempty"`
+	Source       *Source        `xml:"source,omitempty"`
+	Rights       *Text          `xml:"rights,omitempty"`
+}
+
+// Validate checks if the feed entry is valid.
+func (e *Entry) Validate() error {
+	if _, err := url.Parse(e.Id); err != nil {
+		return newInvalidAtomError("feed entry id is not parsable: %v", err)
+	}
+	if err := validateText("feed entry title", e.Title, true); err != nil {
+		return err
+	}
+	if _, err := ParseTime(e.Updated); err != nil {
+		return newInvalidAtomError("feed entry update is not parsable: %v", err)
+	}
+	for _, author := range e.Authors {
+		if err := author.Validate(); err != nil {
+			return err
+		}
+	}
+	if err := validateText("feed entry content", e.Content, false); err != nil {
+		return err
+	}
+	if e.Link != nil {
+		if err := e.Link.Validate(); err != nil {
+			return err
+		}
+	}
+	if err := validateText("feed entry summary", e.Summary, false); err != nil {
+		return err
+	}
+	for _, category := range e.Categories {
+		if err := category.Validate(); err != nil {
+			return err
+		}
+	}
+	for _, contributor := range e.Contributors {
+		if err := contributor.Validate(); err != nil {
+			return err
+		}
+	}
+	if _, err := ParseTime(e.Published); err != nil {
+		return newInvalidAtomError("feed entry published is not parsable: %v", err)
+	}
+	if e.Source != nil {
+		if err := e.Source.Validate(); err != nil {
+			return err
+		}
+	}
+	if err := validateText("feed entry rights", e.Rights, false); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Source preserves the source feeds metadata if the entry is copied
 // from one feed into another feed.
 type Source struct {
-	Title        Text          `xml:"title,omitempty"`
-	Subtitle     Text          `xml:"subtitle,omitempty"`
-	Id           string        `xml:"id",omitempty`
-	Updated      string        `xml:"updated,omitempty"`
-	Author       Author        `xml:"author,omitempty"`
-	Categories   []Category    `xml:"category,omitempty"`
-	Contributors []Contributor `xml:"contributor,omitempty"`
-	Generator    Generator     `xml:"generator,omitempty"`
-	Link         Link          `xml:"link,omitempty"`
-	Icon         string        `xml:"icon,omitempty"`
-	Logo         string        `xml:"logo,omitempty"`
-	Rights       Text          `xml:"rights,omitempty"`
+	Authors      []*Author      `xml:"author,omitempty"`
+	Categories   []*Category    `xml:"category,omitempty"`
+	Contributors []*Contributor `xml:"contributor,omitempty"`
+	Generator    *Generator     `xml:"generator,omitempty"`
+	Icon         string         `xml:"icon,omitempty"`
+	Id           string         `xml:"id",omitempty`
+	Link         *Link          `xml:"link,omitempty"`
+	Logo         string         `xml:"logo,omitempty"`
+	Rights       *Text          `xml:"rights,omitempty"`
+	Subtitle     *Text          `xml:"subtitle,omitempty"`
+	Title        *Text          `xml:"title,omitempty"`
+	Updated      string         `xml:"updated,omitempty"`
+}
+
+// Validate checks if a feed entry source is valid.
+func (s *Source) Validate() error {
+	for _, author := range s.Authors {
+		if err := author.Validate(); err != nil {
+			return err
+		}
+	}
+	for _, category := range s.Categories {
+		if err := category.Validate(); err != nil {
+			return err
+		}
+	}
+	for _, contributor := range s.Contributors {
+		if err := contributor.Validate(); err != nil {
+			return err
+		}
+	}
+	if s.Generator != nil {
+		if err := s.Generator.Validate(); err != nil {
+			return err
+		}
+	}
+	if _, err := url.Parse(s.Id); err != nil {
+		return newInvalidAtomError("feed entry source id is not parsable: %v", err)
+	}
+	if s.Link != nil {
+		if err := s.Link.Validate(); err != nil {
+			return err
+		}
+	}
+	if err := validateText("feed entry source rights", s.Rights, false); err != nil {
+		return err
+	}
+	if err := validateText("feed entry source subtitle", s.Subtitle, false); err != nil {
+		return err
+	}
+	if err := validateText("feed entry source title", s.Title, false); err != nil {
+		return err
+	}
+	if _, err := ParseTime(s.Updated); err != nil {
+		return newInvalidAtomError("feed entry source update is not parsable: %v", err)
+	}
+	return nil
 }
 
 //--------------------
@@ -177,6 +429,25 @@ func Get(u *url.URL) (*Feed, error) {
 	}
 	defer resp.Body.Close()
 	return Decode(resp.Body)
+}
+
+//--------------------
+// ERRORS
+//--------------------
+
+// InvalidAtomError will be returned if a validation fails.
+type InvalidAtomError struct {
+	Err error
+}
+
+// newInvalidAtomError creates a new error for invalid atom feeds.
+func newInvalidAtomError(format string, args ...interface{}) InvalidAtomError {
+	return InvalidAtomError{fmt.Errorf(format, args...)}
+}
+
+// Error returns the error as string.
+func (e InvalidAtomError) Error() string {
+	return e.Err.Error()
 }
 
 // EOF

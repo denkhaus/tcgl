@@ -48,18 +48,18 @@ func TestEncodeDecode(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	a1 := &atom.Feed{
 		XMLNS:   atom.XMLNS,
-		Id:      "http://tideland.bi/pkg/net/atom",
-		Title:   atom.Text{"Test Encode/Decode", "text"},
+		Id:      "http://tideland.biz/pkg/net/atom",
+		Title:   &atom.Text{"Test Encode/Decode", "", "text"},
 		Updated: atom.ComposeTime(time.Now()),
-		Entries: []atom.Entry{
+		Entries: []*atom.Entry{
 			{
 				Id:      "http://tideland.bi/pkg/net/atom/entry-1",
-				Title:   atom.Text{"Entry 1", "text"},
+				Title:   &atom.Text{"Entry 1", "", "text"},
 				Updated: atom.ComposeTime(time.Now()),
 			},
 			{
 				Id:      "http://tideland.bi/pkg/net/atom/entry-2",
-				Title:   atom.Text{"Entry 2", "text"},
+				Title:   &atom.Text{"Entry 2", "", "text"},
 				Updated: atom.ComposeTime(time.Now()),
 			},
 		},
@@ -82,6 +82,8 @@ func TestGet(t *testing.T) {
 	u, _ := url.Parse("http://mue.tideland.biz/feeds/posts/default")
 	f, err := atom.Get(u)
 	assert.Nil(err, "Getting the Atom document returns no error.")
+	err = f.Validate()
+	assert.Nil(err, "Validating returns no error.")
 	b := &bytes.Buffer{}
 	err = atom.Encode(b, f)
 	assert.Nil(err, "Encoding returns no error.")
