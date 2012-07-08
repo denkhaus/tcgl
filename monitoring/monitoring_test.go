@@ -12,7 +12,7 @@ package monitoring
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/asserts"
+	"cgl.tideland.biz/asserts"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -46,9 +46,8 @@ func TestEtmMonitor(t *testing.T) {
 	assert.Match(mp.String(), `Measuring Point "mp:task:5" (.*)`, "String representation should look fine.")
 	MeasuringPointsDo(func(mp *MeasuringPoint) {
 		assert.Match(mp.Id, "mp:task:[0-9]", "Id has to match the pattern.")
-		assert.True(mp.MinDuration <= mp.AvgDuration && mp.AvgDuration <= mp.MaxDuration, 
+		assert.True(mp.MinDuration <= mp.AvgDuration && mp.AvgDuration <= mp.MaxDuration,
 			"Avg should be somewhere between min and max.")
-		assert.True(mp.TtlDuration > 0, "Duration should be greater 0.")
 	})
 }
 
@@ -73,7 +72,7 @@ func TestSsiMonitor(t *testing.T) {
 	assert.Match(ssv.String(), `Stay-Set Variable "ssv:value:5" (.*)`, "String representation should look fine.")
 	StaySetVariablesDo(func(ssv *StaySetVariable) {
 		assert.Match(ssv.Id, "ssv:value:[0-9]", "Id has to match the pattern.")
-		assert.True(ssv.MinValue <= ssv.AvgValue && ssv.AvgValue <= ssv.MaxValue, 
+		assert.True(ssv.MinValue <= ssv.AvgValue && ssv.AvgValue <= ssv.MaxValue,
 			"Avg should be somewhere between min and max.")
 	})
 }
@@ -85,7 +84,7 @@ func TestDsrMonitor(t *testing.T) {
 	Register("dsr:a", func() string { return "A" })
 	Register("dsr:b", func() string { return "4711" })
 	Register("dsr:c", func() string { return "2012-02-15" })
-	Register("dsr:d", func() string { a := 1; a = a / (a-a); return fmt.Sprintf("%d", a) })
+	Register("dsr:d", func() string { a := 1; a = a / (a - a); return fmt.Sprintf("%d", a) })
 	// Need some time to let that backend catch up queued registerings.
 	time.Sleep(1e7)
 	// Asserts.

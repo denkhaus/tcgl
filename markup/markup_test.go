@@ -12,7 +12,7 @@ package markup
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/asserts"
+	"cgl.tideland.biz/asserts"
 	"bytes"
 	"strings"
 	"testing"

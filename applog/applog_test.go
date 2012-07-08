@@ -12,8 +12,8 @@ package applog_test
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/applog"
-	"code.google.com/p/tcgl/asserts"
+	"cgl.tideland.biz/applog"
+	"cgl.tideland.biz/asserts"
 	"log"
 	"os"
 	"testing"

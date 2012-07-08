@@ -163,7 +163,7 @@ func (sl *StandardLogger) Critical(info, msg string) {
 }
 
 // GoLogger just uses the standard go log package.
-type GoLogger struct {}
+type GoLogger struct{}
 
 // Debug logs a message at debug level.
 func (gl GoLogger) Debug(info, msg string) {

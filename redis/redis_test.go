@@ -12,8 +12,8 @@ package redis
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/asserts"
-	"code.google.com/p/tcgl/monitoring"
+	"cgl.tideland.biz/asserts"
+	"cgl.tideland.biz/monitoring"
 	"errors"
 	"testing"
 	"time"

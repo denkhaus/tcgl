@@ -12,7 +12,7 @@ package numerics
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/asserts"
+	"cgl.tideland.biz/asserts"
 	"sort"
 	"testing"
 )

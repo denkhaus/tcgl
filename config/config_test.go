@@ -12,8 +12,8 @@ package config_test
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/asserts"
-	"code.google.com/p/tcgl/config"
+	"cgl.tideland.biz/asserts"
+	"cgl.tideland.biz/config"
 	"testing"
 	"time"
 )

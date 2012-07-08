@@ -12,8 +12,8 @@ package web
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/applog"
-	"code.google.com/p/tcgl/asserts"
+	"cgl.tideland.biz/applog"
+	"cgl.tideland.biz/asserts"
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
@@ -214,8 +214,8 @@ func TestPutGob(t *testing.T) {
 	b := new(bytes.Buffer)
 	err := gob.NewEncoder(b).Encode(inData)
 	assert.Nil(err, "GOB encode.")
-	body, err := localDo("POST", ts, "/test/putgob", Hdr{"Content-Type": "application/vnd.tideland.rwf"}, b.Bytes())
-	assert.Nil(err, "Local GOB POST.")
+	t.Logf("%q", b.String())
+	body, err := localDo("POST", ts, "/test/putgob", Hdr{"Content-Type": "application/vnd.tideland.gob"}, b.Bytes())
 	var outData TestData
 	err = gob.NewDecoder(bytes.NewBuffer(body)).Decode(&outData)
 	assert.Nil(err, "GOB decode.")
@@ -245,6 +245,6 @@ func TestWrapperHandler(t *testing.T) {
 	body, err := localDo("GET", ts, "/test/wrapper", Hdr{}, nil)
 	assert.Nil(err, "Local wrapper GET.")
 	assert.Equal(string(body), "404 page not found\n", "Wrapper result.")
-	}
+}
 
 // EOF

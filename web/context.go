@@ -209,7 +209,7 @@ func (ctx *Context) MarshalGob(data interface{}) {
 // and unmarshals it to the value pointed to by data.
 func (ctx *Context) UnmarshalGob(data interface{}) error {
 	if ctx.Request.Header.Get("Content-Type") != CT_GOB {
-		return errors.New("request content-type isn't application/vnd.tideland.rwf")
+		return errors.New("request content-type isn't application/vnd.tideland.gob")
 	}
 	dec := gob.NewDecoder(ctx.Request.Body)
 	err := dec.Decode(data)

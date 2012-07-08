@@ -13,9 +13,9 @@ package redis
 
 import (
 	"bufio"
-	"code.google.com/p/tcgl/applog"
-	"code.google.com/p/tcgl/identifier"
-	"code.google.com/p/tcgl/monitoring"
+	"cgl.tideland.biz/applog"
+	"cgl.tideland.biz/identifier"
+	"cgl.tideland.biz/monitoring"
 	"errors"
 	"fmt"
 	"net"

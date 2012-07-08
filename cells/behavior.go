@@ -12,7 +12,7 @@ package cells
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/applog"
+	"cgl.tideland.biz/applog"
 )
 
 //--------------------

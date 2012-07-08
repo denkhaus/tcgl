@@ -12,9 +12,9 @@ package cells
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/applog"
-	"code.google.com/p/tcgl/asserts"
-	"code.google.com/p/tcgl/monitoring"
+	"cgl.tideland.biz/applog"
+	"cgl.tideland.biz/asserts"
+	"cgl.tideland.biz/monitoring"
 	"fmt"
 	"math/rand"
 	"testing"

@@ -13,9 +13,9 @@ package rss_test
 
 import (
 	"bytes"
-	"code.google.com/p/tcgl/applog"
-	"code.google.com/p/tcgl/asserts"
-	"code.google.com/p/tcgl/net/rss"
+	"cgl.tideland.biz/applog"
+	"cgl.tideland.biz/asserts"
+	"cgl.tideland.biz/net/rss"
 	"net/url"
 	"testing"
 	"time"

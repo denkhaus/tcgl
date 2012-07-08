@@ -12,7 +12,7 @@ package sort
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/asserts"
+	"cgl.tideland.biz/asserts"
 	"math/rand"
 	"sort"
 	"testing"
@@ -62,9 +62,9 @@ func TestSort(t *testing.T) {
 // ByteSlice is a number of bytes for sorting implementing the sort.Interface.
 type ByteSlice []byte
 
-func (bs ByteSlice) Len() int { return len(bs) }
+func (bs ByteSlice) Len() int           { return len(bs) }
 func (bs ByteSlice) Less(i, j int) bool { return bs[i] < bs[j] }
-func (bs ByteSlice) Swap(i, j int) { bs[i], bs[j] = bs[j], bs[i] }
+func (bs ByteSlice) Swap(i, j int)      { bs[i], bs[j] = bs[j], bs[i] }
 
 // generateIntSlice generates a slice of ints.
 func generateIntSlice(count int) sort.IntSlice {

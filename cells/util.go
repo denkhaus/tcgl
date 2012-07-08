@@ -12,7 +12,7 @@ package cells
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/identifier"
+	"cgl.tideland.biz/identifier"
 	"fmt"
 	"sync"
 	"time"

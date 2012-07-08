@@ -12,8 +12,8 @@ package mapreduce
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/asserts"
-	"code.google.com/p/tcgl/identifier"
+	"cgl.tideland.biz/asserts"
+	"cgl.tideland.biz/identifier"
 	"fmt"
 	"math/rand"
 	"strconv"

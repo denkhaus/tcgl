@@ -12,7 +12,7 @@ package state
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/asserts"
+	"cgl.tideland.biz/asserts"
 	"log"
 	"testing"
 	"time"
@@ -26,7 +26,7 @@ import (
 func TestFsmSuccess(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	// Create some test data.
-	fsm := New(NewLoginHandler(), 5 * time.Minute)
+	fsm := New(NewLoginHandler(), 5*time.Minute)
 	fsm.Handle("login", &LoginData{"yadda", "yadda"})
 	fsm.Handle("prepare", &LoginData{"foo", "bar"})
 	fsm.Handle("login", &LoginData{"foo", "yadda"})
@@ -46,7 +46,7 @@ func TestFsmSuccess(t *testing.T) {
 func TestFsmTimeout(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	// Create some test data.
-	fsm := New(NewLoginHandler(), 250 * time.Millisecond)
+	fsm := New(NewLoginHandler(), 250*time.Millisecond)
 	fsm.Handle("prepare", &LoginData{"foo", "bar"})
 	fsm.Handle("login", &LoginData{"foo", "yadda"})
 	fsm.Handle("login", &LoginData{"foo", "yadda"})
@@ -64,7 +64,7 @@ func TestFsmTimeout(t *testing.T) {
 func TestFsmError(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	// Create some test data.
-	fsm := New(NewLoginHandler(), 250 * time.Millisecond)
+	fsm := New(NewLoginHandler(), 250*time.Millisecond)
 	fsm.Handle("prepare", &LoginData{"foo", "bar"})
 	fsm.Handle("bullshit", &LoginData{"", ""})
 	fsm.Handle("login", &LoginData{"foo", "yadda"})
@@ -204,11 +204,11 @@ func (lh *LoginHandler) HandleLocked(t *Transition) string {
 }
 
 func (lh *LoginHandler) init() {
-	lh.userId              = ""
-	lh.password            = ""
+	lh.userId = ""
+	lh.password = ""
 	lh.illegalLoginCounter = 0
-	lh.locked              = false
-	lh.ticks               = 0
+	lh.locked = false
+	lh.ticks = 0
 }
 
 // EOF

@@ -12,7 +12,7 @@ package identifier
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/asserts"
+	"cgl.tideland.biz/asserts"
 	"testing"
 )
 

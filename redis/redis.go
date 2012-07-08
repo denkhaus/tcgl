@@ -12,8 +12,8 @@ package redis
 //--------------------
 
 import (
-	"code.google.com/p/tcgl/identifier"
-	"code.google.com/p/tcgl/monitoring"
+	"cgl.tideland.biz/identifier"
+	"cgl.tideland.biz/monitoring"
 	"fmt"
 	"sync"
 	"time"

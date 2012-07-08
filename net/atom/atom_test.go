@@ -13,9 +13,9 @@ package atom_test
 
 import (
 	"bytes"
-	"code.google.com/p/tcgl/applog"
-	"code.google.com/p/tcgl/asserts"
-	"code.google.com/p/tcgl/net/atom"
+	"cgl.tideland.biz/applog"
+	"cgl.tideland.biz/asserts"
+	"cgl.tideland.biz/net/atom"
 	"net/url"
 	"testing"
 	"time"
