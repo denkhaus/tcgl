@@ -13,7 +13,9 @@ package net
 
 import (
 	"bytes"
+	"encoding/xml"
 	"fmt"
+	"html"
 	"io"
 	"os"
 	"strings"
@@ -81,6 +83,37 @@ func CharsetReader(charset string, input io.Reader) (io.Reader, error) {
 		return newISO88591CharsetReader(input), nil
 	}
 	return nil, fmt.Errorf("charset %q is not supported", charset)
+}
+
+// StripTags removes the tags of the raw xml string.
+func StripTags(raw string, strict, escaped bool) (string, error) {
+	// Remove escaping.
+	xmldoc := raw
+	if escaped {
+		xmldoc = html.UnescapeString(xmldoc)
+	}
+	// Decode the document.
+	buffer := []string{}
+	dec := xml.NewDecoder(bytes.NewBufferString(xmldoc))
+	dec.Strict = strict
+	dec.CharsetReader = CharsetReader
+	for {
+		token, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		switch t := token.(type) {
+		case xml.CharData:
+			trimmed := strings.TrimSpace(string(t))
+			buffer = append(buffer, trimmed)
+		default:
+			// NOP.
+		}
+	}
+	return strings.Join(buffer, " "), nil
 }
 
 // EOF

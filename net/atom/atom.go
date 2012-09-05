@@ -16,8 +16,10 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -127,6 +129,40 @@ type Text struct {
 	Text string `xml:",chardata"`
 	Src  string `xml:"src,attr,omitempty"`
 	Type string `xml:"type,attr,omitempty"`
+}
+
+// PlainText returns the text as string without any markup. Content from
+// external sources will be retrieved.
+func (t Text) PlainText() (string, error) {
+	// Retrieve the raw text.
+	var raw string
+	if t.Src != "" {
+		resp, err := http.Get(t.Src)
+		if err != nil {
+			return "", newNoPlainTextError(t, err)
+		}
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return "", newNoPlainTextError(t, err)
+		}
+		raw = string(body)
+	} else {
+		raw = t.Text
+	}
+	// Handle raw text depending on type.
+	switch t.Type {
+	case "", TextType:
+		return raw, nil
+	case HTMLType:
+		return net.StripTags(raw, false, true)
+	case XHTMLType:
+		return net.StripTags(raw, true, true)
+	}
+	if strings.HasSuffix(t.Type, "xml") {
+		return net.StripTags(raw, true, true)
+	}
+	return "", newNoPlainTextError(t, fmt.Errorf("illegal text type: %s", t.Type))
 }
 
 // validateText ensures that a text is set if it's mandatory and that
@@ -448,6 +484,23 @@ func newInvalidAtomError(format string, args ...interface{}) InvalidAtomError {
 // Error returns the error as string.
 func (e InvalidAtomError) Error() string {
 	return e.Err.Error()
+}
+
+// NoPlainTextError will be returned if a text can't 
+// be returned as plain text.
+type NoPlainTextError struct {
+	Text Text
+	Err  error
+}
+
+// newNoPlainTextError creates a new error for not convertable texts.
+func newNoPlainTextError(text Text, err error) NoPlainTextError {
+	return NoPlainTextError{text, err}
+}
+
+// Error returns the error as string.
+func (e NoPlainTextError) Error() string {
+	return fmt.Sprintf("can't convert text element %q to plain text: %v", e.Text.Text, e.Err.Error())
 }
 
 // EOF

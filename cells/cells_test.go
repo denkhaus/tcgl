@@ -14,6 +14,7 @@ package cells
 import (
 	"cgl.tideland.biz/asserts"
 	"testing"
+	"strings"
 	"time"
 )
 
@@ -260,17 +261,137 @@ func TestSubscribedEmit(t *testing.T) {
 	c, err := env.EmitSimple("counter-a", "event:1", "data")
 	assert.Nil(err, "No error during raise.")
 
-	// applog.Debugf("Context Active: %v", c.activityCounter)
-
 	err = c.Wait(time.Second)
 	assert.Nil(err, "No error during wait.")
 
-	// bcv, err := c.Get("counter-c")
-	// assert.Nil(err, "No error retrieving the value 'counter-c'.")
-	// assert.Equal(bcv, 1, "Right value of 'counter-c'.")
-
 	err = env.Shutdown()
 	assert.Nil(err, "No error during shutdown.")
+}
+
+// TestBroadcastBehavior tests the pass-through of events by the
+// broadcast behavior.
+func TestBroadcastBehavior(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
+
+	env := NewEnvironment("broadcast-behavior")
+	env.AddCell("broadcast", BroadcastBehaviorFactory)
+	env.AddCell("collector", CollectorBehaviorFactory)
+
+	env.Subscribe("broadcast", "collector")
+
+	env.EmitSimple("broadcast", "event:1", true)
+	env.EmitSimple("broadcast", "event:2", true)
+	env.EmitSimple("broadcast", "event:3", true)
+
+	time.Sleep(100 * time.Millisecond)
+
+	b, _ := env.CellBehavior("collector")
+	collector := b.(EventCollector)
+	events := collector.Events()
+
+	assert.Length(events, 3, "All events received")
+}
+
+// TestFilterBehavior tests the filtering of events by the
+// filter behavior.
+func TestFilterBehavior(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
+
+	ff := func(e Event) bool {
+		if strings.Contains(e.Topic(), "yes") {
+			return true
+		}
+		return false
+	}
+	env := NewEnvironment("filter-behavior")
+	env.AddCell("filter", NewFilteredBroadcastBehaviorFactory(ff))
+	env.AddCell("collector", CollectorBehaviorFactory)
+
+	env.Subscribe("filter", "collector")
+
+	env.EmitSimple("filter", "yes", true)
+	env.EmitSimple("filter", "no", true)
+	env.EmitSimple("filter", "yes", true)
+
+	time.Sleep(100 * time.Millisecond)
+
+	b, _ := env.CellBehavior("collector")
+	collector := b.(EventCollector)
+	events := collector.Events()
+
+	assert.Length(events, 2, "All events received")
+}
+
+// TestSimpleActionBehavior tests the performing of simple actions 
+// with events by the simple action behavior.
+func TestSimpleActionBehavior(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
+
+	saf := func(e Event, emitter EventEmitter) {
+		values := e.Payload().([]int)
+		result := 0
+		switch e.Topic() {
+		case "add":
+			for _, value := range values {
+				result += value
+			}
+		case "sub":
+			for _, value := range values {
+				result -= value
+			}
+		}
+		emitter.EmitSimple("result", result)
+	}
+	env := NewEnvironment("action-behavior")
+	env.AddCell("action", NewSimpleActionBehaviorFactory(saf))
+	env.AddCell("collector", CollectorBehaviorFactory)
+
+	env.Subscribe("action", "collector")
+
+	env.EmitSimple("action", "add", []int{1, 2, 3, 4, 5})
+	env.EmitSimple("action", "sub", []int{1, 2, 3, 4, 5})
+	env.EmitSimple("action", "add", []int{1, 1})
+
+	time.Sleep(100 * time.Millisecond)
+
+	b, _ := env.CellBehavior("collector")
+	collector := b.(EventCollector)
+	events := collector.Events()
+
+	assert.Equal(events[0].Payload().(int), 15, "First result is ok.")
+	assert.Equal(events[1].Payload().(int), -15, "Second result is ok.")
+	assert.Equal(events[2].Payload().(int), 2, "Third result is ok.")
+}
+
+// TestCounterBehavior tests the counting of events 
+// by the counter behavior.
+func TestCounterBehavior(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
+
+	cf := func(e Event) []string {
+		return []string{e.Topic()}
+	}
+	env := NewEnvironment("counter-behavior")
+	env.AddCell("counter", NewCounterBehaviorFactory(cf))
+	env.AddCell("collector", CollectorBehaviorFactory)
+
+	env.Subscribe("counter", "collector")
+
+	env.EmitSimple("counter", "a", true)
+	env.EmitSimple("counter", "b", true)
+	env.EmitSimple("counter", "c", true)
+	env.EmitSimple("counter", "a", true)
+
+	time.Sleep(100 * time.Millisecond)
+
+	b, _ := env.CellBehavior("collector")
+	collector := b.(EventCollector)
+	events := collector.Events()
+
+	assert.Equal(events[0].Payload().(int64), int64(1), "First result is ok.")
+	assert.Equal(events[1].Payload().(int64), int64(1), "Second result is ok.")
+	assert.Equal(events[2].Payload().(int64), int64(1), "Third result is ok.")
+	assert.Equal(events[3].Payload().(int64), int64(2), "Fourth result is ok.")
 }
 
 // EOF

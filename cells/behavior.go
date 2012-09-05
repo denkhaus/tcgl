@@ -16,6 +16,58 @@ import (
 )
 
 //--------------------
+// COLLECTOR BEHAVIOR
+//--------------------
+
+// EventCollector defines the interface for a behavior
+// collecting events.
+type EventCollector interface {
+	// Events returns the collected list of events.
+	Events() []Event
+	// Reset clears the list of events.
+	Reset()
+}
+
+// collectorBehavior collects events for debugging
+type collectorBehavior struct {
+	events []Event
+}
+
+// CollectorBehaviorFactory creates a collector behavior. It collects 
+// all events emitted directly or by subscription. The event is passed
+// through.
+func CollectorBehaviorFactory() Behavior {
+	return &collectorBehavior{[]Event{}}
+}
+
+// Init the behavior.
+func (b *collectorBehavior) Init(env *Environment, id Id) error {
+	return nil
+}
+
+// ProcessEvent processes an event.
+func (b *collectorBehavior) ProcessEvent(e Event, emitter EventEmitter) {
+	b.events = append(b.events, e)
+	emitter.Emit(e)
+}
+
+// Recover from an error.
+func (b *collectorBehavior) Recover(err interface{}, e Event) {}
+
+// Stop the behavior.
+func (b *collectorBehavior) Stop() {}
+
+// Event returns the collected events.
+func (b *collectorBehavior) Events() []Event {
+	return b.events
+}
+
+// Reset clears the list of events.
+func (b *collectorBehavior) Reset() {
+	b.events = []Event{}
+}
+
+//--------------------
 // LOG BEHAVIOR
 //--------------------
 
@@ -38,7 +90,7 @@ func (b *logBehavior) Init(env *Environment, id Id) error {
 
 // ProcessEvent processes an event.
 func (b *logBehavior) ProcessEvent(e Event, emitter EventEmitter) {
-	applog.Infof("cells: '%s' event topic: '%s' payload: '%v'", b.id, e.Topic(), e.Payload())
+	applog.Infof("cell: '%s' event topic: '%s' payload: '%v'", b.id, e.Topic(), e.Payload())
 }
 
 // Recover from an error. Can't even log, it's a logging problem.
