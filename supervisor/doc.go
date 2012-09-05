@@ -13,7 +13,9 @@
 // only the one goroutine, in case of one for all all goroutines
 // will be terminated by sending a signal to them and then 
 // restarted. If the restart frequency is exceeded the whole
-// supervisor panics.
+// supervisor stops working with an error and signals that to
+// a possible own supervisor. This way trees of supervisors with
+// different strategies and restart frequencies are possible.
 package supervisor
 
 // EOF

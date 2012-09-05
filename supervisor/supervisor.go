@@ -26,19 +26,24 @@ type message struct {
 	code     int
 	id       string
 	sup      supervisable
-	reason   interface{}
+	payload  interface{}
 	response chan *message
 }
 
 func (m *message) err() error {
-	if r, ok := m.reason.(error); ok {
+	if r, ok := m.payload.(error); ok {
 		return r
 	}
-	return fmt.Errorf("reason: %v", m.reason)
+	return fmt.Errorf("reason: %v", m.payload)
+}
+
+func (m *message) children() []string {
+	return m.payload.([]string)
 }
 
 const (
 	msgStart = iota
+	msgChildren
 	msgTerminate
 	msgStop
 	msgError
@@ -53,11 +58,19 @@ func newStartMsg(id string, sup supervisable) *message {
 	}
 }
 
+func newChildrenMsg(children []string) *message {
+	return &message{
+		code:     msgChildren,
+		payload:  children,
+		response: make(chan *message),
+	}
+}
+
 func newTerminateMsg(id string, reason interface{}) *message {
 	return &message{
 		code:     msgTerminate,
 		id:       id,
-		reason:   reason,
+		payload:  reason,
 		response: make(chan *message),
 	}
 }
@@ -66,16 +79,16 @@ func newStopMsg(id string, reason interface{}) *message {
 	return &message{
 		code:     msgStop,
 		id:       id,
-		reason:   reason,
+		payload:  reason,
 		response: make(chan *message),
 	}
 }
 
 func newErrorMsg(id string, reason interface{}) *message {
 	return &message{
-		code:   msgError,
-		id:     id,
-		reason: reason,
+		code:    msgError,
+		id:      id,
+		payload: reason,
 	}
 }
 
@@ -317,10 +330,20 @@ func (sup *Supervisor) Supervisor(id string, strategy Strategy, intensity int, p
 	return chsup, nil
 }
 
+// Children returns a list of children ids.
+func (sup *Supervisor) Children() []string {
+	if sup.status != stRunning {
+		return []string{}
+	}
+	msg := newChildrenMsg(nil)
+	sup.messages <- msg
+	resp := <-msg.response
+	return resp.children()
+}
+
 // Terminate tells a child to stop.
 func (sup *Supervisor) Terminate(id string) error {
 	if sup.status != stRunning {
-		println(sup.status)
 		return sup.Err()
 	}
 	msg := newTerminateMsg(id, nil)
@@ -414,6 +437,12 @@ func (sup *Supervisor) loop() {
 				sup.children[msg.id] = msg.sup
 				msg.sup.start()
 				msg.response <- nil
+			case msgChildren:
+				children := []string{}
+				for id := range sup.children {
+					children = append(children, id)
+				}
+				msg.response <- newChildrenMsg(children)
 			case msgTerminate:
 				if sup.children[msg.id] == nil {
 					msg.response <- newErrorMsg(sup.id, &InvalidIdError{false, msg.id})
@@ -423,7 +452,7 @@ func (sup *Supervisor) loop() {
 				delete(sup.children, msg.id)
 				msg.response <- nil
 			case msgError:
-				if msg.reason != nil {
+				if msg.err() != nil {
 					if err := sup.handleChildError(msg.id); err != nil {
 						applog.Errorf("supervisor %q cannot handle error of child %q: %v", sup, msg.id, err)
 						sup.err = err

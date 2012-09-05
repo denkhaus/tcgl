@@ -15,6 +15,7 @@ import (
 	"cgl.tideland.biz/asserts"
 	"cgl.tideland.biz/supervisor"
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 )
@@ -22,6 +23,30 @@ import (
 //--------------------
 // TESTS
 //--------------------
+
+// TestChildren tests the retrieval of the children ids.
+func TestChildren(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
+	sup := supervisor.NewSupervisor("children", supervisor.OneForOne, 5, time.Second)
+	results := starts{}
+	child := func(h *supervisor.Handle) error { return selectChild(h, results) }
+
+	sup.Go("alpha", child)
+	sup.Go("beta", child)
+	sup.Go("gamma", child)
+
+	children := sup.Children()
+	sort.Strings(children)
+	assert.Equal(children, []string{"alpha", "beta", "gamma"}, "all children")
+
+	sup.Terminate("beta")
+	children = sup.Children()
+	sort.Strings(children)
+	assert.Equal(children, []string{"alpha", "gamma"}, "children w/o 'beta'")
+
+	err := sup.Stop()
+	assert.Nil(err, "stopping of 'children'")
+}
 
 // TestIllegalTerminate tests the termination of an illegal child.
 func TestIllegalTerminate(t *testing.T) {
