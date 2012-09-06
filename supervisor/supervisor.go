@@ -146,9 +146,10 @@ type supervisable interface {
 type status string
 
 const (
-	stReady   = "ready"
-	stRunning = "running"
-	stError   = "error"
+	stReady     = "ready"
+	stRunning   = "running"
+	stFinishing = "finishing"
+	stError     = "error"
 )
 
 //--------------------
@@ -179,6 +180,7 @@ func (sf *supervisableFunc) setHandle(h *Handle) {
 func (sf *supervisableFunc) wrapper() {
 	var err error
 	defer func() {
+		sf.status = stFinishing
 		var msg *message
 		r := recover()
 		switch {
@@ -468,6 +470,7 @@ func (sup *Supervisor) loop() {
 
 // finish does the cleanup when the supervisor terminates.
 func (sup *Supervisor) finish() {
+	sup.status = stFinishing
 	// Clear message queue.
 clean:
 	for {

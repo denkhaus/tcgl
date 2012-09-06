@@ -183,6 +183,31 @@ func TestFuncsOneForAll(t *testing.T) {
 	assert.Equal(results["gamma"], 3, "starts of 'gamma'")
 }
 
+// TestStampede tests a panic with strategy one for all and a large number of children.
+func TestStampede(t *testing.T) {
+	assert := asserts.NewTestingAsserts(t, true)
+	sup := supervisor.NewSupervisor("stampede", supervisor.OneForAll, 5, time.Second)
+	results := starts{}
+	childA := func(h *supervisor.Handle) error { return methodChild(h, results) }
+	childB := func(h *supervisor.Handle) error { return panicChild(h, results) }
+	count := 10000
+
+	for i := 0; i < count; i++ {
+		id := fmt.Sprintf("alpha-%d", i)
+		sup.Go(id, childA)
+	}
+	sup.Go("beta", childB)
+
+	time.Sleep(2 * time.Second)
+
+	err := sup.Stop()
+	assert.Nil(err, "stopping of 'stampede'")
+	for i := 0; i < count; i++ {
+		id := fmt.Sprintf("alpha-%d", i)
+		assert.Equal(results[id], 2, "starts of child '"+id+"'")
+	}
+}
+
 // TestChildSupervisor tests a supervisor as a child.
 func TestChildSupervisor(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
