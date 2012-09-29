@@ -72,6 +72,7 @@ type unifiedRequestProtocol struct {
 	conn              net.Conn
 	writer            *bufio.Writer
 	reader            *bufio.Reader
+	err               error
 	commandChan       chan *envCommand
 	subscriptionChan  chan *envSubscription
 	dataChan          chan *envData
@@ -156,7 +157,7 @@ func (urp *unifiedRequestProtocol) receiver() {
 	for {
 		b, err := urp.reader.ReadBytes('\n')
 		if err != nil {
-			urp.dataChan <- &envData{0, nil, err}
+			urp.dataChan <- &envData{0, nil, &ConnectionError{err}}
 			return
 		}
 		// Analyze first bytes.
@@ -186,7 +187,7 @@ func (urp *unifiedRequestProtocol) receiver() {
 				for r < ir {
 					n, err := urp.reader.Read(br[r:])
 					if err != nil {
-						urp.dataChan <- &envData{0, nil, err}
+						urp.dataChan <- &envData{0, nil, &ConnectionError{err}}
 						return
 					}
 					r += n
@@ -363,43 +364,52 @@ func (urp *unifiedRequestProtocol) writeRequest(cmd string, args []interface{}) 
 }
 
 // writeDataNumber sends the number of data elements to the server.
-func (urp *unifiedRequestProtocol) writeDataNumber(dataLen int) error {
-	urp.writer.Write([]byte(fmt.Sprintf("*%d\r\n", dataLen)))
-	return urp.writer.Flush()
+func (urp *unifiedRequestProtocol) writeDataNumber(dataLen int) (err error) {
+	if err = urp.write([]byte(fmt.Sprintf("*%d\r\n", dataLen))); err != nil {
+		return
+	}
+	if err = urp.flush(); err != nil {
+		return
+	}
+	return nil
 }
 
 // writeData sends a data element to the server.
-func (urp *unifiedRequestProtocol) writeData(data []byte) error {
+func (urp *unifiedRequestProtocol) writeData(data []byte) (err error) {
 	// Write the len of the data.
-	b := []byte(fmt.Sprintf("$%d\r\n", len(data)))
-	if _, err := urp.writer.Write(b); err != nil {
-		return err
+	if err = urp.write([]byte(fmt.Sprintf("$%d\r\n", len(data)))); err != nil {
+		return
 	}
 	// Write the data.
-	if _, err := urp.writer.Write(data); err != nil {
-		return err
+	if err = urp.write(data); err != nil {
+		return
 	}
-	urp.writer.Write([]byte{'\r', '\n'})
-	return urp.writer.Flush()
+	if err = urp.write([]byte{'\r', '\n'}); err != nil {
+		return
+	}
+	if err = urp.flush(); err != nil {
+		return
+	}
+	return nil
 }
 
 // writeArgument sends an argument to the server.
-func (urp *unifiedRequestProtocol) writeArgument(arg interface{}) error {
+func (urp *unifiedRequestProtocol) writeArgument(arg interface{}) (err error) {
 	// Little helper for converting and writing.
-	convertAndWrite := func(a interface{}) error {
+	convertAndWrite := func(a interface{}) (ierr error) {
 		data := valueToBytes(a)
-		if err := urp.writeData(data); err != nil {
-			return err
+		if ierr := urp.writeData(data); ierr != nil {
+			return ierr
 		}
 		return nil
 	}
 	// Another helper for writing a hash.
 	writeHash := func(h Hash) error {
 		for k, v := range h {
-			if err := convertAndWrite(k); err != nil {
+			if ierr := convertAndWrite(k); ierr != nil {
 				return err
 			}
-			if err := convertAndWrite(v); err != nil {
+			if ierr := convertAndWrite(v); ierr != nil {
 				return err
 			}
 		}
@@ -419,6 +429,24 @@ func (urp *unifiedRequestProtocol) writeArgument(arg interface{}) error {
 		if err := convertAndWrite(typedArg); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// write is an error handling wrapper for the writers write method.
+func (urp *unifiedRequestProtocol) write(raw []byte) error {
+	if _, err := urp.writer.Write(raw); err != nil {
+		urp.err = &ConnectionError{err}
+		return urp.err
+	}
+	return nil
+}
+
+// flush is an error handling wrapper for the writers flush method.
+func (urp *unifiedRequestProtocol) flush() error {
+	if err := urp.writer.Flush(); err != nil {
+		urp.err = &ConnectionError{err}
+		return urp.err
 	}
 	return nil
 }
@@ -464,6 +492,7 @@ func (urp *unifiedRequestProtocol) receiveReply(rs *ResultSet, multi bool) {
 		// Invalid reply.
 		rs.err = &InvalidReplyError{ed.length, ed.data, ed.err}
 	}
+	urp.err = rs.err
 }
 
 // prepareChannels converts the channels from strings to interfaces which is

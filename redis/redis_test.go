@@ -12,9 +12,11 @@ package redis
 //--------------------
 
 import (
+	"cgl.tideland.biz/applog"
 	"cgl.tideland.biz/asserts"
 	"cgl.tideland.biz/monitoring"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -403,10 +405,43 @@ func TestIllegalDatabases(t *testing.T) {
 	assert.Assignable(rs.Error(), &ConnectionError{}, "Error has correct type.")
 }
 
+// Test a long run to check stopping and restarting redis.
+func TestLongRun(t *testing.T) {
+	if testing.Short() {
+		return
+	}
+
+	assert := asserts.NewTestingAsserts(t, true)
+	db := Connect(Configuration{})
+	wait := make(chan bool)
+
+	for i := 0; i < 100; i++ {
+		go func(ii int) {
+			for j := 0; j < 20; j++ {
+				key := fmt.Sprintf("long-run:%d:%d", ii, j)
+				applog.Debugf("key: %s", key)
+				rs := db.Command("set", key, ii+j)
+				if !rs.IsOK() {
+					applog.Errorf("%v", rs.Error())
+				}
+				time.Sleep(time.Second)
+				if ii == 99 && j == 19 {
+					wait <- true
+				}
+			}
+		}(i)
+	}
+
+	<-wait
+	rs := db.Command("exists", "long-run:99:19")
+	exists, err := rs.ValueAsBool()
+	assert.Nil(err, "No error after 'exists'.")
+	assert.True(exists, "Wanted key exists.")
+}
+
 // Test measuring (pure output).
 func TestMeasuring(t *testing.T) {
 	monitoring.MeasuringPointsPrintAll()
-	monitoring.StaySetVariablesPrintAll()
 }
 
 // EOF

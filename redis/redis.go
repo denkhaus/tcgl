@@ -12,10 +12,7 @@ package redis
 //--------------------
 
 import (
-	"cgl.tideland.biz/identifier"
-	"cgl.tideland.biz/monitoring"
 	"fmt"
-	"sync"
 	"time"
 )
 
@@ -45,26 +42,24 @@ func (c *Configuration) String() string {
 
 // Database manages the access to one database.
 type Database struct {
-	mutex         sync.Mutex
 	configuration *Configuration
 	pool          chan *unifiedRequestProtocol
-	poolUsage     int
+	connections   int
 	dbClosed      bool
 }
 
 // Connect connects a Redis database based on the configuration.
 func Connect(c Configuration) *Database {
 	checkConfiguration(&c)
-	// Create the database client instance.
-	db := &Database{
+	return &Database{
 		configuration: &c,
 		pool:          make(chan *unifiedRequestProtocol, c.PoolSize),
 	}
-	// Init pool with nils.
-	for i := 0; i < c.PoolSize; i++ {
-		db.pool <- nil
-	}
-	return db
+}
+
+// Close the database.
+func (db *Database) Close() {
+	db.dbClosed = true
 }
 
 // Command performs a Redis command.
@@ -74,10 +69,8 @@ func (db *Database) Command(cmd string, args ...interface{}) *ResultSet {
 		rs.err = &DatabaseClosedError{db}
 		return rs
 	}
-
 	urp, err := db.pullURP()
 	defer db.pushURP(urp)
-
 	if err != nil {
 		rs.err = err
 		return rs
@@ -101,15 +94,12 @@ func (db *Database) MultiCommand(f func(*MultiCommand)) *ResultSet {
 	// Create result set.
 	rs := newResultSet("multi")
 	rs.resultSets = []*ResultSet{}
-
 	urp, err := db.pullURP()
 	defer db.pushURP(urp)
-
 	if err != nil {
 		rs.err = err
 		return rs
 	}
-
 	mc := newMultiCommand(rs, urp)
 	mc.process(f)
 	return rs
@@ -152,33 +142,35 @@ func (db *Database) Publish(channel string, message interface{}) (int, error) {
 // pullURP retrieves a unified request protocol managing the
 // communication with Redis out of the pool.
 func (db *Database) pullURP() (*unifiedRequestProtocol, error) {
-	db.mutex.Lock()
-	defer db.mutex.Unlock()
-
-	urp := <-db.pool
-	if urp == nil {
-		// Lazy creation of a new URP.
-		var err error
-		urp, err = newUnifiedRequestProtocol(db)
+	select {
+	case urp := <-db.pool:
+		return urp, nil
+	default:
+		urp, err := newUnifiedRequestProtocol(db)
 		if err != nil {
 			return nil, err
 		}
+		return urp, nil
 	}
-	db.poolUsage++
-	monitoring.SetVariable(identifier.Identifier("redis", "pool", "usage"), int64(db.poolUsage))
-	return urp, nil
+	panic("unreachable")
 }
 
 // pushURP returns a unified request protocol back to the pool.
 func (db *Database) pushURP(urp *unifiedRequestProtocol) {
-	db.mutex.Lock()
-	defer db.mutex.Unlock()
-
-	db.pool <- urp
-	if urp != nil {
-		db.poolUsage--
+	if urp == nil {
+		return
 	}
-	monitoring.SetVariable(identifier.Identifier("redis", "pool", "usage"), int64(db.poolUsage))
+	if urp.err != nil || db.dbClosed {
+		urp.stop()
+		return
+	}
+	select {
+	case db.pool <- urp:
+		// Everything ok.
+	default:
+		// Pool is full, stop it.
+		urp.stop()
+	}
 }
 
 //--------------------
