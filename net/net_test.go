@@ -39,6 +39,11 @@ func TestStripTags(t *testing.T) {
 	assert.Equal(out, "The quick brown fox jumps over the lazy dog.", "Tags have been removed.")
 
 	in = "<p>The quick brown <b>fox &amp; goose</b> jump over the lazy &lt;em&gt;dog&lt;/em&gt;.</p>"
+	out, err = net.StripTags(in, true, false)
+	assert.Nil(err, "No error during stripping.")
+	assert.Equal(out, "The quick brown fox & goose jump over the lazy <em>dog</em>.", "Tags have been removed.")
+
+	in = "<p>The quick brown <b>fox &amp;amp; goose</b> jump over the lazy &lt;em&gt;dog&lt;/em&gt;.</p>"
 	out, err = net.StripTags(in, true, true)
 	assert.Nil(err, "No error during stripping.")
 	assert.Equal(out, "The quick brown fox & goose jump over the lazy dog .", "Tags have been removed.")

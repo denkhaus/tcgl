@@ -16,8 +16,17 @@ import (
 	"cgl.tideland.biz/supervisor"
 	"fmt"
 	"sort"
+	"sync"
 	"testing"
 	"time"
+)
+
+//--------------------
+// VARS
+//--------------------
+
+var (
+	shortWait = 100 * time.Millisecond
 )
 
 //--------------------
@@ -28,8 +37,8 @@ import (
 func TestChildren(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	sup := supervisor.NewSupervisor("children", supervisor.OneForOne, 5, time.Second)
-	results := starts{}
-	child := func(h *supervisor.Handle) error { return selectChild(h, results) }
+	st := newStarts()
+	child := func(h *supervisor.Handle) error { return selectChild(h, st) }
 
 	sup.Go("alpha", child)
 	sup.Go("beta", child)
@@ -64,8 +73,8 @@ func TestIllegalTerminate(t *testing.T) {
 func TestFuncSelect(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	sup := supervisor.NewSupervisor("select", supervisor.OneForOne, 5, time.Second)
-	results := starts{}
-	child := func(h *supervisor.Handle) error { return selectChild(h, results) }
+	st := newStarts()
+	child := func(h *supervisor.Handle) error { return selectChild(h, st) }
 
 	sup.Go("alpha", child)
 
@@ -73,7 +82,7 @@ func TestFuncSelect(t *testing.T) {
 
 	err := sup.Terminate("alpha")
 	assert.Nil(err, "termination of 'alpha'")
-	assert.Equal(results["alpha"], 1, "starts of 'alpha'")
+	assert.Equal(st.count("alpha"), 1, "starts of 'alpha'")
 
 	err = sup.Stop()
 	assert.Nil(err, "stopping of 'select'")
@@ -83,8 +92,8 @@ func TestFuncSelect(t *testing.T) {
 func TestFuncMethod(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	sup := supervisor.NewSupervisor("method", supervisor.OneForOne, 5, time.Second)
-	results := starts{}
-	child := func(h *supervisor.Handle) error { return methodChild(h, results) }
+	st := newStarts()
+	child := func(h *supervisor.Handle) error { return methodChild(h, st) }
 
 	sup.Go("alpha", child)
 
@@ -92,7 +101,7 @@ func TestFuncMethod(t *testing.T) {
 
 	err := sup.Terminate("alpha")
 	assert.Nil(err, "termination of 'alpha'")
-	assert.Equal(results["alpha"], 1, "starts of 'alpha'")
+	assert.Equal(st.count("alpha"), 1, "starts of 'alpha'")
 
 	err = sup.Stop()
 	assert.Nil(err, "stopping of 'method'")
@@ -102,16 +111,16 @@ func TestFuncMethod(t *testing.T) {
 func TestFuncPanic(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	sup := supervisor.NewSupervisor("panic", supervisor.OneForOne, 5, time.Second)
-	results := starts{}
-	child := func(h *supervisor.Handle) error { return panicChild(h, results) }
+	st := newStarts()
+	child := func(h *supervisor.Handle) error { return panicChild(h, st, shortWait) }
 
 	sup.Go("alpha", child)
 
-	time.Sleep(125 * time.Millisecond)
+	time.Sleep(325 * time.Millisecond)
 
 	err := sup.Terminate("alpha")
 	assert.Nil(err, "termination of 'alpha'")
-	assert.Equal(results["alpha"], 3, "starts of 'alpha'")
+	assert.Equal(st.count("alpha"), 4, "starts of 'alpha'")
 
 	err = sup.Stop()
 	assert.Nil(err, "stopping of 'panic'")
@@ -121,16 +130,16 @@ func TestFuncPanic(t *testing.T) {
 func TestFuncError(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	sup := supervisor.NewSupervisor("error", supervisor.OneForOne, 5, time.Second)
-	results := starts{}
-	child := func(h *supervisor.Handle) error { return errorChild(h, results) }
+	st := newStarts()
+	child := func(h *supervisor.Handle) error { return errorChild(h, st, shortWait) }
 
 	sup.Go("alpha", child)
 
-	time.Sleep(125 * time.Millisecond)
+	time.Sleep(325 * time.Millisecond)
 
 	err := sup.Terminate("alpha")
 	assert.Nil(err, "termination of 'alpha'")
-	assert.Equal(results["alpha"], 2, "starts of 'alpha'")
+	assert.Equal(st.count("alpha"), 4, "starts of 'alpha'")
 
 	err = sup.Stop()
 	assert.Nil(err, "stopping of 'error'")
@@ -139,58 +148,58 @@ func TestFuncError(t *testing.T) {
 // TestFuncsOneForOne tests multiple childs restarting one for one.
 func TestFuncsOneForOne(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
-	sup := supervisor.NewSupervisor("one4one", supervisor.OneForOne, 10, time.Second)
-	results := starts{}
-	childA := func(h *supervisor.Handle) error { return selectChild(h, results) }
-	childB := func(h *supervisor.Handle) error { return methodChild(h, results) }
-	childC := func(h *supervisor.Handle) error { return panicChild(h, results) }
-	childD := func(h *supervisor.Handle) error { return errorChild(h, results) }
+	sup := supervisor.NewSupervisor("one4one", supervisor.OneForOne, 25, time.Second)
+	st := newStarts()
+	childA := func(h *supervisor.Handle) error { return selectChild(h, st) }
+	childB := func(h *supervisor.Handle) error { return methodChild(h, st) }
+	childC := func(h *supervisor.Handle) error { return panicChild(h, st, shortWait) }
+	childD := func(h *supervisor.Handle) error { return errorChild(h, st, shortWait) }
 
 	sup.Go("alpha", childA)
 	sup.Go("beta", childB)
 	sup.Go("gamma", childC)
 	sup.Go("delta", childD)
 
-	time.Sleep(125 * time.Millisecond)
+	time.Sleep(time.Second)
 
 	err := sup.Stop()
 	assert.Nil(err, "stopping of 'one4one'")
-	assert.Equal(results["alpha"], 1, "starts of 'alpha'")
-	assert.Equal(results["beta"], 1, "starts of 'beta'")
-	assert.Equal(results["gamma"], 3, "starts of 'gamma'")
-	assert.Equal(results["delta"], 2, "starts of 'delta'")
+	assert.Equal(st.count("alpha"), 1, "starts of 'alpha'")
+	assert.Equal(st.count("beta"), 1, "starts of 'beta'")
+	assert.Equal(st.count("gamma"), 10, "starts of 'gamma'")
+	assert.Equal(st.count("delta"), 10, "starts of 'delta'")
 }
 
 // TestFuncsOneForAll tests multiple childs restarting one for all.
 func TestFuncsOneForAll(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
-	sup := supervisor.NewSupervisor("one4all", supervisor.OneForAll, 10, time.Second)
-	results := starts{}
-	childA := func(h *supervisor.Handle) error { return selectChild(h, results) }
-	childB := func(h *supervisor.Handle) error { return methodChild(h, results) }
-	childC := func(h *supervisor.Handle) error { return panicChild(h, results) }
+	sup := supervisor.NewSupervisor("one4all", supervisor.OneForAll, 25, time.Second)
+	st := newStarts()
+	childA := func(h *supervisor.Handle) error { return selectChild(h, st) }
+	childB := func(h *supervisor.Handle) error { return methodChild(h, st) }
+	childC := func(h *supervisor.Handle) error { return panicChild(h, st, shortWait) }
 
 	sup.Go("alpha", childA)
 	sup.Go("beta", childB)
 	sup.Go("gamma", childC)
 
-	time.Sleep(125 * time.Millisecond)
+	time.Sleep(time.Second)
 
 	err := sup.Stop()
 	assert.Nil(err, "stopping of 'one4all'")
-	assert.Equal(results["alpha"], 3, "starts of 'alpha'")
-	assert.Equal(results["beta"], 3, "starts of 'beta'")
-	assert.Equal(results["gamma"], 3, "starts of 'gamma'")
+	assert.Equal(st.count("alpha"), 10, "starts of 'alpha'")
+	assert.Equal(st.count("beta"), 10, "starts of 'beta'")
+	assert.Equal(st.count("gamma"), 10, "starts of 'gamma'")
 }
 
 // TestStampede tests a panic with strategy one for all and a large number of children.
 func TestStampede(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	sup := supervisor.NewSupervisor("stampede", supervisor.OneForAll, 5, time.Second)
-	results := starts{}
-	childA := func(h *supervisor.Handle) error { return methodChild(h, results) }
-	childB := func(h *supervisor.Handle) error { return panicChild(h, results) }
-	count := 10000
+	st := newStarts()
+	childA := func(h *supervisor.Handle) error { return methodChild(h, st) }
+	childB := func(h *supervisor.Handle) error { return panicChild(h, st, shortWait) }
+	count := 1000
 
 	for i := 0; i < count; i++ {
 		id := fmt.Sprintf("alpha-%d", i)
@@ -204,7 +213,7 @@ func TestStampede(t *testing.T) {
 	assert.Nil(err, "stopping of 'stampede'")
 	for i := 0; i < count; i++ {
 		id := fmt.Sprintf("alpha-%d", i)
-		assert.Equal(results[id], 2, "starts of child '"+id+"'")
+		assert.True(st.count(id) >= 1, "starts of child '"+id+"'")
 	}
 }
 
@@ -212,10 +221,10 @@ func TestStampede(t *testing.T) {
 func TestChildSupervisor(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	sup := supervisor.NewSupervisor("parent", supervisor.OneForAll, 3, time.Second)
-	chsup, _ := sup.Supervisor("child", supervisor.OneForOne, 5, 250*time.Millisecond)
-	results := starts{}
-	childA := func(h *supervisor.Handle) error { return methodChild(h, results) }
-	childB := func(h *supervisor.Handle) error { return panicChild(h, results) }
+	chsup, _ := sup.Supervisor("child", supervisor.OneForOne, 5, time.Second)
+	st := newStarts()
+	childA := func(h *supervisor.Handle) error { return methodChild(h, st) }
+	childB := func(h *supervisor.Handle) error { return panicChild(h, st, shortWait) }
 
 	sup.Go("alpha", childA)
 	sup.Go("beta", childA)
@@ -227,35 +236,35 @@ func TestChildSupervisor(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	err := sup.Stop()
-	assert.ErrorMatch(err, `supervisor had .* restarts in .*`, "stopping of 'child-supervisor'")
-	assert.Equal(results["alpha"], 4, "starts of 'alpha'")
-	assert.Equal(results["beta"], 4, "starts of 'beta'")
-	assert.Equal(results["gamma"], 4, "starts of 'gamma'")
-	assert.Equal(results["delta"], 4, "starts of 'delta'")
-	assert.Equal(results["epsilon"], 24, "starts of 'epsilon'")
+	assert.Nil(err, "stopping parent of 'child-supervisor'")
+	assert.Equal(st.count("alpha"), 4, "starts of 'alpha'")
+	assert.Equal(st.count("beta"), 4, "starts of 'beta'")
+	assert.Equal(st.count("gamma"), 4, "starts of 'gamma'")
+	assert.Equal(st.count("delta"), 4, "starts of 'delta'")
+	assert.True(st.count("epsilon") > 1, "starts of 'epsilon'")
 }
 
 // TestSupervisorTree tests a tree of supervisors.
 func TestSupervisorTree(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
-	sup := supervisor.NewSupervisor("parent", supervisor.OneForAll, 2, time.Second)
+	sup := supervisor.NewSupervisor("parent", supervisor.OneForAll, 3, 5*time.Second)
 	chsup, _ := sup.Supervisor("child", supervisor.OneForAll, 3, time.Second)
-	gchsup, _ := chsup.Supervisor("grandchild", supervisor.OneForOne, 3, 250*time.Millisecond)
-	results := starts{}
-	childA := func(h *supervisor.Handle) error { return methodChild(h, results) }
-	childB := func(h *supervisor.Handle) error { return panicChild(h, results) }
+	gchsup, _ := chsup.Supervisor("grandchild", supervisor.OneForOne, 3, time.Second)
+	st := newStarts()
+	childA := func(h *supervisor.Handle) error { return methodChild(h, st) }
+	childB := func(h *supervisor.Handle) error { return panicChild(h, st, shortWait) }
 
 	sup.Go("alpha", childA)
 	chsup.Go("beta", childA)
 	gchsup.Go("gamma", childB)
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(10 * time.Second)
 
 	err := sup.Stop()
 	assert.ErrorMatch(err, `supervisor had .* restarts in .*`, "stopping of 'supervisor-tree'")
-	assert.Equal(results["alpha"], 3, "starts of 'alpha'")
-	assert.Equal(results["beta"], 12, "starts of 'beta'")
-	assert.Equal(results["gamma"], 48, "starts of 'gamma'")
+	assert.Equal(st.count("alpha"), 4, "starts of 'alpha'")
+	assert.Equal(st.count("beta"), 16, "starts of 'beta'")
+	assert.Equal(st.count("gamma"), 64, "starts of 'gamma'")
 }
 
 //--------------------
@@ -263,15 +272,32 @@ func TestSupervisorTree(t *testing.T) {
 //--------------------
 
 // starts collects goroutine starts.
-type starts map[string]int
+type starts struct {
+	mutex   sync.Mutex
+	counter map[string]int
+}
 
-func (s starts) incr(h *supervisor.Handle) {
+func newStarts() *starts {
+	return &starts{
+		counter: make(map[string]int),
+	}
+}
+
+func (s *starts) incr(h *supervisor.Handle) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	id := h.Id()
-	s[id]++
+	s.counter[id]++
+}
+
+func (s *starts) count(id string) int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.counter[id]
 }
 
 // selectChild works in a select loop until terminated.
-func selectChild(h *supervisor.Handle, s starts) error {
+func selectChild(h *supervisor.Handle, s *starts) error {
 	s.incr(h)
 	for {
 		select {
@@ -284,7 +310,7 @@ func selectChild(h *supervisor.Handle, s starts) error {
 }
 
 // methodChild loops until the handle method signals termination.
-func methodChild(h *supervisor.Handle, s starts) error {
+func methodChild(h *supervisor.Handle, s *starts) error {
 	s.incr(h)
 	for !h.IsTerminated() {
 		time.Sleep(10 * time.Millisecond)
@@ -292,38 +318,26 @@ func methodChild(h *supervisor.Handle, s starts) error {
 	return nil
 }
 
-// panicChild produces a panic after 5 iterations.
-func panicChild(h *supervisor.Handle, s starts) error {
+// panicChild produces a panic after a given time.
+func panicChild(h *supervisor.Handle, s *starts, t time.Duration) error {
 	s.incr(h)
-	counter := 0
-	for {
-		counter++
-		select {
-		case <-h.Terminate():
-			return nil
-		case <-time.After(10 * time.Millisecond):
-		}
-		if counter == 5 {
-			panic("panic!")
-		}
+	select {
+	case <-h.Terminate():
+		return nil
+	case <-time.After(t):
+		panic("panic!")
 	}
 	return nil
 }
 
-// errorChild returns an error after 10 iterations.
-func errorChild(h *supervisor.Handle, s starts) error {
+// errorChild returns an error after a given time.
+func errorChild(h *supervisor.Handle, s *starts, t time.Duration) error {
 	s.incr(h)
-	counter := 0
-	for {
-		counter++
-		select {
-		case <-h.Terminate():
-			return nil
-		case <-time.After(10 * time.Millisecond):
-		}
-		if counter == 10 {
-			return fmt.Errorf("error!")
-		}
+	select {
+	case <-h.Terminate():
+		return nil
+	case <-time.After(t):
+		return fmt.Errorf("error!")
 	}
 	return nil
 }
