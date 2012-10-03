@@ -251,21 +251,25 @@ func (urp *unifiedRequestProtocol) handleCommand(ec *envCommand) {
 
 // logCommand logs a command and its execution status.
 func (urp *unifiedRequestProtocol) logCommand(ec *envCommand) {
-	var log string
-	if ec.multi {
-		log = "multi "
-	}
-	log += "command " + ec.command
-	for _, arg := range ec.args {
-		log = fmt.Sprintf("%s %v", log, arg)
+	// Format the command for the log entry.
+	formatCommand := func() string {
+		var log string
+		if ec.multi {
+			log = "multi "
+		}
+		log += "command " + ec.command
+		for _, arg := range ec.args {
+			log = fmt.Sprintf("%s %v", log, arg)
+		}
+		return log
 	}
 	// Positive commands only if wanted, errors always.
 	if ec.rs.IsOK() {
 		if urp.database.configuration.LogCommands {
-			applog.Infof("%s OK", log)
+			applog.Infof("%s OK", formatCommand())
 		}
 	} else {
-		applog.Errorf("%s ERROR %v", log, ec.rs.err)
+		applog.Errorf("%s ERROR %v", formatCommand(), ec.rs.err)
 	}
 }
 
