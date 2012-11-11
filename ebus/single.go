@@ -13,84 +13,63 @@ package ebus
 
 import (
 	"cgl.tideland.biz/config"
-	"sync"
 )
 
 //--------------------
 // SINGLE NODE BACKEND
 //--------------------
 
-// singleBackend implements the event bus backend for a single node. 
-type singleBackend struct{}
+// singleNodeBackend implements the event bus backend for a single node. 
+type singleNodeBackend struct {
+	router *nodeRouter
+}
 
-func newSingleBackend() backend {
-	return &singleBackend{}
+func newSingleNodeBackend() backend {
+	return &singleNodeBackend{newNodeRouter()}
 }
 
 // Init initializes the single event bus with the given configuration. If this
 // isn't done all further operation will fail.
-func (b *singleBackend) Init(config *config.Configuration) error {
+func (b *singleNodeBackend) Init(config *config.Configuration) error {
 	return nil
 }
 
-// Register adds an agent factory with an id. The agent instance will
-// only be created if the id is not yet used.
-func (b *singleBackend) Register(id Id, factory AgentFactory) error {
+// Stop shuts the event bus down.
+func (b *singleNodeBackend) Stop() error {
+	stopTickers()
+	b.router.stop()
 	return nil
 }
 
-// Unregister stops and removes the agent with the given id.
-func (b *singleBackend) Unregister(id Id) error {
-	return nil
+// Register adds an agent.
+func (b *singleNodeBackend) Register(agent Agent) (Agent, error) {
+	err := b.router.register(agent)
+	return agent, err
 }
 
-// NewContext creates an initial context.
-func (b *singleBackend) NewContext() (Context, error) {
-	return &singleContext{
-		values: make(map[Id]Value),
-	}, nil
+// Deregister stops and removes the agent.
+func (b *singleNodeBackend) Deregister(agent Agent) error {
+	return b.router.deregister(agent)
 }
 
-// RaiseEvent raises an event with a context.
-func (b *singleBackend) RaiseEvent(topic string, payload Value, ctx Context) error {
-	return nil
+// Lookup retrieves a registered agent by id.
+func (b *singleNodeBackend) Lookup(id string) (Agent, error) {
+	return b.router.lookup(id)
 }
 
-//--------------------
-// SINGLE NODE CONTEXT
-//--------------------
-
-// singleContext implements the context for a single node. 
-// It just works in memory.
-type singleContext struct {
-	mutex  sync.RWMutex
-	values map[Id]Value
+// Subscribe subscribes the agent to the topic.
+func (b *singleNodeBackend) Subscribe(agent Agent, topic string) error {
+	return b.router.subscribe(agent, topic)
 }
 
-// Set a value in the context.
-func (ctx *singleContext) Set(key Id, value Value) error {
-	ctx.mutex.Lock()
-	defer ctx.mutex.Unlock()
-	ctx.values[key] = Value
-	return nil
+// Unsubscribe removes the subscription of the agent from the topic. 
+func (b *singleNodeBackend) Unsubscribe(agent Agent, topic string) error {
+	return b.router.unsubscribe(agent, topic)
 }
 
-// Get a value out of the context.
-func (ctx *singleContext) Get(key Id) (Value, error) {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-	v := ctx.values[key]
-	if v == nil {
-		return nil, &ContextValueNotFoundError{key}
-	}
-	return v, nil
-}
-
-// Delete a value from the context.
-func (ctx *singleContext) Delete(key Id) error {
-	ctx.mutex.Lock()
-	defer ctx.mutex.Unlock()
-	delete(ctx.values, key)
+// Emit emits new event to the event bus.
+func (b *singleNodeBackend) Emit(event Event) error {
+	b.router.push(event)
 	return nil
 }
 

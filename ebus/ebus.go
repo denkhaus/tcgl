@@ -13,53 +13,40 @@ package ebus
 
 import (
 	"cgl.tideland.biz/config"
-	"time"
+	"fmt"
 )
 
 //--------------------
 // INTERFACES
 //--------------------
 
-// Value represents the values that can be stored in the context
-// of used as event payload.
-type Value interface{}
-
-// Context is passed with the events during processing
-// to manage shared values.
-type Context interface {
-	Set(key Id, value Value) error
-	Get(key Id) (Value, error)
-	Delete(key Id) error
-}
-
 // Event represents anything that happens in the system and has
 // to be processed.
 type Event interface {
-	// Time returns the time the event is created.
-	Time() time.Time
+	// Payload returns the payload of the event into
+	// the value. It is passed as a serialized copy to
+	// avoid concurrent changes and to provide the same
+	// content when it is distributed via networks.
+	Payload(value interface{}) error
 	// Topic returns the topic of the event.
 	Topic() string
-	// Payload returns the payload of the event.
-	Payload() Value
 }
 
 // Agent is the interface that has to be implemented
 // of those agent behaviors which can be deployed to the
 // event bus.
 type Agent interface {
-	// Init initializes the deployed agent. It returns a slice
-	// of topics it subscribes to.
-	Init(id Id) ([]string, error)
+	// Id returns the unique identifier of the agent.
+	Id() string
 	// Process processes an event.
-	Process(evt Event, ctx Context) error
+	Process(event Event) error
 	// Recover from an error during the processing of an event.
-	Recover(r interface{}, evt Event) error
+	Recover(r interface{}, event Event) error
 	// Stop tells the agent to cleanup.
-	Stop() error
+	Stop()
+	// Err returns the error the agent possibly stopped with.
+	Err() error
 }
-
-// AgentFactory is a function that creates an agent instance.
-type AgentFactory func() Agent
 
 //--------------------
 // BACKEND
@@ -69,14 +56,17 @@ type AgentFactory func() Agent
 // used as event bus.
 type backend interface {
 	Init(config *config.Configuration) error
-	Register(id Id, factory AgentFactory) error
-	Unregister(id Id) error
-	NewContext() (Context, error)
-	RaiseEvent(topic string, payload Value, ctx Context) error
+	Stop() error
+	Register(agent Agent) (Agent, error)
+	Deregister(agent Agent) error
+	Lookup(id string) (Agent, error)
+	Subscribe(agent Agent, topic string) error
+	Unsubscribe(agent Agent, topic string) error
+	Emit(event Event) error
 }
 
 // eventBus is the backend used by the API functions.
-var eventBus *backend
+var eventBus backend
 
 //--------------------
 // FUNCTIONS
@@ -85,42 +75,80 @@ var eventBus *backend
 // Init initializes the event bus with the given configuration. If this
 // isn't done all further operation will fail.
 func Init(config *config.Configuration) error {
-	eventBus = newSingleBackend()
-
+	backend, err := config.GetDefault("backend", "single")
+	if err != nil {
+		return err
+	}
+	switch backend {
+	case "single":
+		eventBus = newSingleNodeBackend()
+	default:
+		panic(fmt.Sprintf("invalid backend %q", backend))
+	}
 	return eventBus.Init(config)
 }
 
-// Register adds an agent factory with an id. The agent instance will
-// only be created if the id is not yet used.
-func Register(id Id, factory AgentFactory) error {
+// Stop shuts the event bus down.
+func Stop() error {
 	if eventBus == nil {
 		panic("event bus is not initialized")
 	}
-	return eventBus.Register(id, factory)
+	return eventBus.Stop()
 }
 
-// Unregister stops and removes the agent with the given id.
-func Unregister(id Id) error {
+// Register adds an agent.
+func Register(agent Agent) (Agent, error) {
 	if eventBus == nil {
 		panic("event bus is not initialized")
 	}
-	return eventBus.Unregister(id)
+	return eventBus.Register(agent)
 }
 
-// NewContext creates an initial context.
-func NewContext() (Context, error) {
+// Deregister stops and removes the agent.
+func Deregister(agent Agent) error {
 	if eventBus == nil {
 		panic("event bus is not initialized")
 	}
-	return eventBus.NewContext(id)
+	return eventBus.Deregister(agent)
 }
 
-// RaiseEvent raises an event with a context.
-func RaiseEvent(topic string, payload Value, ctx Context) error {
+// Lookup retrieves a registered agent by id.
+func Lookup(id string) (Agent, error) {
 	if eventBus == nil {
 		panic("event bus is not initialized")
 	}
-	return eventBus.RaiseEvent(topic, payload, ctx)
+	return eventBus.Lookup(id)
+}
+
+// Subscribe subscribes the agent to the topic created out of 
+// the stem and the parts.
+func Subscribe(agent Agent, stem string, parts ...interface{}) error {
+	if eventBus == nil {
+		panic("event bus is not initialized")
+	}
+	return eventBus.Subscribe(agent, Id(stem, parts...))
+}
+
+// Unsubscribe removes the subscription of the agent from the topic 
+// created out of the stem and the parts.
+func Unsubscribe(agent Agent, stem string, parts ...interface{}) error {
+	if eventBus == nil {
+		panic("event bus is not initialized")
+	}
+	return eventBus.Unsubscribe(agent, Id(stem, parts...))
+}
+
+// Emit emits new event with the given payload and the topic
+// created out of the stem and the parts to the event bus.
+func Emit(payload interface{}, stem string, parts ...interface{}) error {
+	if eventBus == nil {
+		panic("event bus is not initialized")
+	}
+	event, err := newSimpleEvent(payload, Id(stem, parts...))
+	if err != nil {
+		return err
+	}
+	return eventBus.Emit(event)
 }
 
 // EOF
