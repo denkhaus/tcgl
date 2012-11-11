@@ -33,10 +33,6 @@ type Event interface {
 	Topic() string
 	// Payload returns the payload of the simple event.
 	Payload() interface{}
-	// Context returns the context of a set of event processings.
-	Context() *Context
-	// SetContext set the context of a set of event processings.
-	SetContext(c *Context)
 }
 
 // simpleEvent can be used if no own event implementation is
