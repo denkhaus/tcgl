@@ -47,6 +47,8 @@ const (
 	Empty
 	NotEmpty
 	Length
+	Panics
+	Fail
 )
 
 var testNames = []string{
@@ -67,6 +69,8 @@ var testNames = []string{
 	Empty:        "empty",
 	NotEmpty:     "not empty",
 	Length:       "length",
+	Panics:       "panics",
+	Fail:         "fail",
 }
 
 func (t Test) String() string {
@@ -92,10 +96,16 @@ func panicFailFunc(test Test, obtained, expected interface{}, msg string) bool {
 		obex = fmt.Sprintf("'%v'", obtained)
 	case Implementor, Assignable, Unassignable:
 		obex = fmt.Sprintf("'%v' <> '%v'", ValueDescription(obtained), ValueDescription(expected))
+	case Fail:
+		obex = "fail intended"
 	default:
 		obex = fmt.Sprintf("'%v' <> '%v'", obtained, expected)
 	}
-	panic(fmt.Sprintf("assert '%s' failed: %s (%s)", test, obex, msg))
+	if test == Fail {
+		panic(fmt.Sprintf("assert failed: %s (%s)", obex, msg))
+	} else {
+		panic(fmt.Sprintf("assert '%s' failed: %s (%s)", test, obex, msg))
+	}
 	return false
 }
 
@@ -109,14 +119,19 @@ func generateTestingFailFunc(t *testing.T, fail bool) FailFunc {
 		funcName := funcNameParts[funcNamePartsIdx]
 		buffer := &bytes.Buffer{}
 		fmt.Fprintf(buffer, "--------------------------------------------------------------------------------\n")
-		fmt.Fprintf(buffer, "%s:%d: Assert '%s' failed!\n\n", fileName, line, test)
+		if test == Fail {
+			fmt.Fprintf(buffer, "%s:%d: Assert failed!\n\n", fileName, line)
+		} else {
+			fmt.Fprintf(buffer, "%s:%d: Assert '%s' failed!\n\n", fileName, line, test)
+		}
 		fmt.Fprintf(buffer, "Function...: %s()\n", funcName)
 		switch test {
-		case True, False, Nil, NotNil, Empty, NotEmpty:
+		case True, False, Nil, NotNil, Empty, NotEmpty, Panics:
 			fmt.Fprintf(buffer, "Obtained...: %v\n", obtained)
 		case Implementor, Assignable, Unassignable:
 			fmt.Fprintf(buffer, "Obtained...: %v\n", ValueDescription(obtained))
 			fmt.Fprintf(buffer, "Expected...: %v\n", ValueDescription(expected))
+		case Fail:
 		default:
 			fmt.Fprintf(buffer, "Obtained...: %v\n", obtained)
 			fmt.Fprintf(buffer, "Expected...: %v\n", expected)
@@ -364,6 +379,23 @@ func (a Asserts) Length(obtained interface{}, expected int, msg string) bool {
 			"obtained type is no array, chan, map, slice, string or has method Len()")
 	}
 	return true
+}
+
+// Panics checks if the passed function panicas.
+func (a Asserts) Panics(pf func(), msg string) (ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			// Panic, that's ok!
+			ok = true
+		}
+	}()
+	pf()
+	return a.failFunc(Panics, ValueDescription(pf), nil, msg)
+}
+
+// Fail always fails.
+func (a Asserts) Fail(msg string) bool {
+	return a.failFunc(Fail, nil, nil, msg)
 }
 
 //--------------------

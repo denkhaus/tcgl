@@ -278,7 +278,36 @@ func TestAssertLength(t *testing.T) {
 	}
 }
 
-// TestPanicAssert tests if the panic assert panics when failing.
+// TestAssertPanics tests the Panics() assertion.
+func TestAssertPanics(t *testing.T) {
+	a := createValueAsserts(t)
+
+	if !a.Panics(func() { panic("ouch") }, "should panic") {
+		t.Errorf("Panics() returned false")
+	}
+	if a.Panics(func() { _ = 1 + 1 }, "should not panic") {
+		t.Errorf("Panics() returned true")
+	}
+}
+
+// TestAssertFail tests the fail asserts.
+func TestAssertFail(t *testing.T) {
+	a := createValueAsserts(t)
+
+	a.Fail("this should fail")
+}
+
+// TestTestingAssert tests the testing asserts.
+func TestTestingAssert(t *testing.T) {
+	a := NewTestingAsserts(t, false)
+	foo := func() {}
+	bar := 4711
+
+	a.Assignable(47, 11, "should not fail")
+	a.Assignable(foo, bar, "should fail")
+}
+
+// TestPanicAssert tests if the panic asserts panic when they fail.
 func TestPanicAssert(t *testing.T) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -293,16 +322,6 @@ func TestPanicAssert(t *testing.T) {
 	a.Assignable(47, foo, "should fail")
 
 	t.Errorf("should not be reached")
-}
-
-// TestTestingAssert tests the testing assert.
-func TestTestingAssert(t *testing.T) {
-	a := NewTestingAsserts(t, false)
-	foo := func() {}
-	bar := 4711
-
-	a.Assignable(47, 11, "should not fail")
-	a.Assignable(foo, bar, "should fail")
 }
 
 // EOF
