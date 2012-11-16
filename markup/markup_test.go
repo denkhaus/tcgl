@@ -5,15 +5,16 @@
 // All rights reserved. Use of this source code is governed 
 // by the new BSD license.
 
-package markup
+package markup_test
 
 //--------------------
 // IMPORTS
 //--------------------
 
 import (
-	"cgl.tideland.biz/asserts"
 	"bytes"
+	"cgl.tideland.biz/asserts"
+	"cgl.tideland.biz/markup"
 	"strings"
 	"testing"
 )
@@ -25,44 +26,57 @@ import (
 // Test creating.
 func TestSmlCreating(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
-	root := createSmlStructure()
+	root := createSMLStructure()
 	assert.Equal(root.Tag(), "root", "Root tag has to be 'root'.")
 	assert.NotEmpty(root, "Root tag is not empty.")
 }
 
 // Test SML writer processing.
-func TestSmlWriterProcessing(t *testing.T) {
+func TestSMLWriterProcessing(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
-	root := createSmlStructure()
+	root := createSMLStructure()
 	bufA := bytes.NewBufferString("")
 	bufB := bytes.NewBufferString("")
-	sppA := NewSmlWriterProcessor(bufA, true)
-	sppB := NewSmlWriterProcessor(bufB, false)
+	sppA := markup.NewSMLWriterProcessor(bufA, true)
+	sppB := markup.NewSMLWriterProcessor(bufB, false)
 
 	root.ProcessWith(sppA)
 	root.ProcessWith(sppB)
+
+	println("===== WITH INDENT =====")
+	println(bufA.String())
+	println("===== WITHOUT INDENT =====")
+	println(bufB.String())
+	println("===== DONE =====")
 
 	assert.NotEmpty(bufA, "Buffer A should not be empty.")
 	assert.NotEmpty(bufB, "Buffer B should not be empty.")
 }
 
 // Test positive reading.
-func TestSmlPositiveReading(t *testing.T) {
+func TestSMLPositiveReading(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
-	sml := "Before!   {foo {bar:1:first Yadda ^{Test^} 1}  {inbetween}  {bar:2:last Yadda {Test ^^} 2}}   After!"
-	reader := NewSmlReader(strings.NewReader(sml))
-	root, err := reader.RootTagNode()
+	sml := "Before!   {foo {bar:1:first Yadda ^{Test^} 1} {! Raw: }} { ! ^^^ !}  {inbetween}  {bar:2:last Yadda {Test ^^} 2}}   After!"
+	root, err := markup.ReadSML(strings.NewReader(sml))
 	assert.Nil(err, "Expected no reader error.")
 	assert.Equal(root.Tag(), "foo", "Root tag is 'foo'.")
 	assert.NotEmpty(root, "Root tag is not empty.")
+
+	buf := bytes.NewBufferString("")
+	spp := markup.NewSMLWriterProcessor(buf, true)
+
+	root.ProcessWith(spp)
+
+	println("===== PARSED SML =====")
+	println(buf.String())
+	println("===== DONE =====")
 }
 
 // Test negative reading.
-func TestSmlNegativeReading(t *testing.T) {
+func TestSMLNegativeReading(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	sml := "{Foo {bar:1 Yadda {test} {} 1} {bar:2 Yadda 2}}"
-	reader := NewSmlReader(strings.NewReader(sml))
-	_, err := reader.RootTagNode()
+	_, err := markup.ReadSML(strings.NewReader(sml))
 	assert.ErrorMatch(err, "invalid rune.*", "Invalid rune should be found.")
 }
 
@@ -71,17 +85,21 @@ func TestSmlNegativeReading(t *testing.T) {
 //--------------------
 
 // Create a SML structure.
-func createSmlStructure() *TagNode {
-	root := NewTagNode("root")
-	root.AppendText("Text A")
-	root.AppendText("Text B")
-	root.AppendTaggedText("comment", "A first comment.")
-	subA := root.AppendTag("sub-a:1st:important")
-	subA.AppendText("Text A.A")
-	root.AppendTaggedText("comment", "A second comment.")
-	subB := root.AppendTag("sub-b:2nd")
-	subB.AppendText("Text B.A")
-	subB.AppendTaggedText("raw", "Any raw text with {, }, and ^.")
+func createSMLStructure() *markup.TagNode {
+	root := markup.NewTagNode("root")
+	root.AppendTextNode("Text A")
+	root.AppendTextNode("Text B")
+	root.AppendTaggedTextNode("comment", "A first comment.")
+	subA := root.AppendTagNode("sub-a:1st:important").(*markup.TagNode)
+	subA.AppendTextNode("Text A.A")
+	root.AppendTaggedTextNode("comment", "A second comment.")
+	subB := root.AppendTagNode("sub-b:2nd").(*markup.TagNode)
+	subB.AppendTextNode("Text B.A")
+	subB.AppendTaggedTextNode("text", "Any text with the special characters {, }, and ^.")
+	subC := root.AppendTagNode("sub-c").(*markup.TagNode)
+	subC.AppendTextNode("Before raw.")
+	subC.AppendRawNode("func Test(i int) { println(i) }")
+	subC.AppendTextNode("After raw.")
 	return root
 }
 

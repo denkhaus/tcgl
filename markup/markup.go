@@ -14,7 +14,6 @@ package markup
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -31,6 +30,7 @@ type Processor interface {
 	OpenTag(tag []string)
 	CloseTag(tag []string)
 	Text(text string)
+	Raw(raw string)
 }
 
 //--------------------
@@ -62,81 +62,77 @@ func NewTagNode(tag string) *TagNode {
 	if !validIdentifier(tmp) {
 		return nil
 	}
-	tn := &TagNode{
+	n := &TagNode{
 		tag:      strings.Split(tmp, ":"),
 		children: make([]Node, 0),
 	}
-	return tn
+	return n
 }
 
-// AppendTag creates a new tag node, appends it as last child
+// AppendTagNode creates a new tag node, appends it as last child
 // and returns it.
-func (tn *TagNode) AppendTag(tag string) *TagNode {
+func (t *TagNode) AppendTagNode(tag string) Node {
 	n := NewTagNode(tag)
 	if n != nil {
-		tn.children = append(tn.children, n)
+		t.AppendNode(n)
 	}
 	return n
 }
 
-// AppendTagNode appends a tag node as last child and
-// returns it.
-func (tn *TagNode) AppendTagNode(n *TagNode) *TagNode {
-	tn.children = append(tn.children, n)
-	return n
+// AppendTextNode create a text node, appends it as last child
+// and returns it.
+func (t *TagNode) AppendTextNode(text string) Node {
+	return t.AppendNode(NewTextNode(text))
 }
 
-// AppendText create a text node, appends it as last child
-// returns it.
-func (tn *TagNode) AppendText(text string) *TextNode {
-	n := NewTextNode(text)
-	tn.children = append(tn.children, n)
-	return n
-}
-
-// AppendTaggedText creates a tag node like AppendTag() and
-// for this node also a text node like AppendText(). The tag
+// AppendTaggedTextNode creates a tag node like AppendTagNode() and
+// for this node also a text node like AppendTextNode(). The tag
 // node will be returned.
-func (tn *TagNode) AppendTaggedText(tag, text string) *TagNode {
-	n := NewTagNode(tag)
+func (t *TagNode) AppendTaggedTextNode(tag, text string) Node {
+	n := t.AppendTagNode(tag).(*TagNode)
 	if n != nil {
-		n.AppendText(text)
-		tn.children = append(tn.children, n)
+		n.AppendTextNode(text)
 	}
 	return n
 }
 
-// AppendTextNode appends a text node as last child and
-// returns it.
-func (tn *TagNode) AppendTextNode(n *TextNode) *TextNode {
-	tn.children = append(tn.children, n)
+// AppendRawNode create a raw node, appends it as last child
+// and returns it.
+func (t *TagNode) AppendRawNode(raw string) Node {
+	return t.AppendNode(NewRawNode(raw))
+}
+
+// AppendNode appends a node
+func (t *TagNode) AppendNode(n Node) Node {
+	t.children = append(t.children, n)
 	return n
 }
 
-func (tn TagNode) Tag() string {
-	return strings.Join(tn.tag, ":")	
+// Tag returns the tag parts joined by a colon.
+func (t *TagNode) Tag() string {
+	return strings.Join(t.tag, ":")
 }
 
 // Len return the number of children of this node.
-func (tn TagNode) Len() int {
-	return len(tn.children)
+func (t *TagNode) Len() int {
+	return 1 + len(t.children)
 }
 
 // ProcessWith processes the node and all chidlren recursively
 // with the passed processor.
-func (tn TagNode) ProcessWith(p Processor) {
-	p.OpenTag(tn.tag)
-	for _, child := range tn.children {
+func (t *TagNode) ProcessWith(p Processor) {
+	p.OpenTag(t.tag)
+	for _, child := range t.children {
 		child.ProcessWith(p)
 	}
-	p.CloseTag(tn.tag)
+	p.CloseTag(t.tag)
 }
 
 // String returns the tag node as string.
-func (tn TagNode) String() string {
+func (t *TagNode) String() string {
 	buf := bytes.NewBufferString("")
-	spp := NewSmlWriterProcessor(buf, true)
-	tn.ProcessWith(spp)
+	spp := NewSMLWriterProcessor(buf, true)
+	t.ProcessWith(spp)
 	return buf.String()
 }
 
@@ -151,23 +147,53 @@ type TextNode struct {
 
 // NewTextNode creates a new text node.
 func NewTextNode(text string) *TextNode {
-	return &TextNode{text}
+	return &TextNode{strings.TrimSpace(text)}
 }
 
-// Len returns the len of the text if the text node.
-func (tn *TextNode) Len() int {
-	return len(tn.text)
+// Len returns the len of the text in the text node.
+func (t *TextNode) Len() int {
+	return len(t.text)
 }
 
 // ProcessWith processes the text node with the given
 // processor.
-func (tn *TextNode) ProcessWith(p Processor) {
-	p.Text(tn.text)
+func (t *TextNode) ProcessWith(p Processor) {
+	p.Text(t.text)
 }
 
 // String returns the text node as string.
-func (tn *TextNode) String() string {
-	return tn.text
+func (t *TextNode) String() string {
+	return t.text
+}
+
+//--------------------
+// RAW NODE
+//--------------------
+
+// RawNode is a node containing some raw data.
+type RawNode struct {
+	raw string
+}
+
+// NewRawNode creates a new raw node.
+func NewRawNode(raw string) *RawNode {
+	return &RawNode{strings.TrimSpace(raw)}
+}
+
+// Len returns the len of the data in the raw node.
+func (r *RawNode) Len() int {
+	return len(r.raw)
+}
+
+// ProcessWith processes the raw node with the given
+// processor.
+func (r *RawNode) ProcessWith(p Processor) {
+	p.Raw(r.raw)
+}
+
+// String returns the raw node as string.
+func (r *RawNode) String() string {
+	return r.raw
 }
 
 //--------------------
@@ -194,237 +220,316 @@ func validIdentifier(id string) bool {
 // SML READER
 //--------------------
 
-// Control values.
+// Rune classes.
 const (
-	ctrlText int = iota+1
-	ctrlSpace
-	ctrlOpen
-	ctrlClose
-	ctrlEscape
-	ctrlTag
-	ctrlEOF
-	ctrlInvalid
+	rcText int = iota + 1
+	rcSpace
+	rcOpen
+	rcClose
+	rcEscape
+	rcExclamation
+	rcTag
+	rcEOF
+	rcInvalid
 )
 
-// Node read modes.
-const (
-	modeInit = iota
-	modeTag
-	modeText
-)
-
-// SmlReader is a reader creating a SML document
-// out of a reader stream.
-type SmlReader struct {
-	reader *bufio.Reader
-	index  int
-	root   *TagNode
-	error  error
-}
-
-// NewSmlReader creates a new reader for SML documents.
-func NewSmlReader(reader io.Reader) *SmlReader {
-	// Init the reader.
-	sr := &SmlReader{
+// ReadSML parses a SML document and returns it as 
+// node structure.
+func ReadSML(reader io.Reader) (*TagNode, error) {
+	s := &smlReader{
 		reader: bufio.NewReader(reader),
 		index:  -1,
 	}
-	node, ctrl := sr.readNode()
-	switch ctrl {
-	case ctrlClose:
-		sr.root = node
-		sr.error = nil
-	case ctrlEOF:
-		msg := fmt.Sprintf("eof too early at index %v", sr.index)
-
-		sr.error = errors.New(msg)
-	case ctrlInvalid:
-		msg := fmt.Sprintf("invalid rune at index %v", sr.index)
-
-		sr.error = errors.New(msg)
+	err := s.readPreliminary()
+	if err != nil {
+		return nil, err
 	}
-	return sr
+	return s.readTagNode()
 }
 
-// RootTagNode returns the root tag node of the document
-func (sr *SmlReader) RootTagNode() (*TagNode, error) {
-	return sr.root, sr.error
+// smlReader is used by ReadSML to parse a SML document
+// and return it as node structure.
+type smlReader struct {
+	reader *bufio.Reader
+	index  int
 }
 
-// readNode reads the next node from the stream. This may be
-// executed recursively.
-func (sr *SmlReader) readNode() (*TagNode, int) {
-	var node *TagNode
-	var buffer *bytes.Buffer
-	mode := modeInit
+// readPreliminary reads the content before the first node.
+func (s *smlReader) readPreliminary() error {
 	for {
-		rune, ctrl := sr.readRune()
-		sr.index++
-		switch mode {
-		case modeInit:
-			// Before the first opening bracket.
-			switch ctrl {
-			case ctrlEOF:
-				return nil, ctrlEOF
-			case ctrlOpen:
-				mode = modeTag
-				buffer = bytes.NewBufferString("")
+		_, rc, err := s.readRune()
+		switch {
+		case err != nil:
+			return err
+		case rc == rcEOF:
+			return fmt.Errorf("unexpected end of file while reading preliminary")
+		case rc == rcOpen:
+			return nil
+		}
+	}
+	// Unreachable.
+	panic("unreachable")
+}
+
+// readNode reads the next tag node.
+func (s *smlReader) readTagNode() (*TagNode, error) {
+	tag, rc, err := s.readTag()
+	if err != nil {
+		return nil, err
+	}
+	node := NewTagNode(tag)
+	// Read children.
+	if rc != rcClose {
+		err = s.readTagChildren(node)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return node, nil
+}
+
+// readTag reads the tag of a node. It als returns the class of the next rune.
+func (s *smlReader) readTag() (string, int, error) {
+	var buf bytes.Buffer
+	for {
+		r, rc, err := s.readRune()
+		switch {
+		case err != nil:
+			return "", 0, err
+		case rc == rcEOF:
+			return "", 0, fmt.Errorf("unexpected end of file while reading a tag")
+		case rc == rcTag:
+			buf.WriteRune(r)
+		case rc == rcSpace || rc == rcClose:
+			return buf.String(), rc, nil
+		default:
+			return "", 0, fmt.Errorf("invalid tag rune at index %d", s.index)
+		}
+	}
+	// Unreachable.
+	panic("unreachable")
+}
+
+// readChildren reads the children of passed parent tag node.
+func (s *smlReader) readTagChildren(p *TagNode) error {
+	for {
+		_, rc, err := s.readRune()
+		switch {
+		case err != nil:
+			return err
+		case rc == rcEOF:
+			return fmt.Errorf("unexpected end of file while reading children")
+		case rc == rcClose:
+			return nil
+		case rc == rcOpen:
+			node, err := s.readTagOrRawNode()
+			if err != nil {
+				return err
 			}
-		case modeTag:
-			// Reading a tag.
-			switch ctrl {
-			case ctrlEOF:
-				return nil, ctrlEOF
-			case ctrlTag:
-				buffer.WriteRune(rune)
-			case ctrlSpace:
-				if buffer.Len() == 0 {
-					return nil, ctrlInvalid
-				}
-				node = NewTagNode(buffer.String())
-				buffer = bytes.NewBufferString("")
-				mode = modeText
-			case ctrlClose:
-				if buffer.Len() == 0 {
-					return nil, ctrlInvalid
-				}
-				node = NewTagNode(buffer.String())
-				return node, ctrlClose
-			default:
-				return nil, ctrlInvalid
+			if node.Len() > 0 {
+				p.AppendNode(node)
 			}
-		case modeText:
-			// Reading the text including the subnodes following
-			// the space after the tag or id.
-			switch ctrl {
-			case ctrlEOF:
-				return nil, ctrlEOF
-			case ctrlOpen:
-				text := strings.TrimSpace(buffer.String())
-				if len(text) > 0 {
-					node.AppendText(text)
-				}
-				buffer = bytes.NewBufferString("")
-				sr.reader.UnreadRune()
-				subnode, subctrl := sr.readNode()
-				if subctrl == ctrlClose {
-					// Correct closed subnode.
-					node.AppendTagNode(subnode)
-				} else {
-					// Error while reading the subnode.
-					return nil, subctrl
-				}
-			case ctrlClose:
-				text := strings.TrimSpace(buffer.String())
-				if len(text) > 0 {
-					node.AppendText(text)
-				}
-				return node, ctrlClose
-			case ctrlEscape:
-				rune, ctrl = sr.readRune()
-				if ctrl == ctrlOpen || ctrl == ctrlClose || ctrl == ctrlEscape {
-					buffer.WriteRune(rune)
-					sr.index++
-				} else {
-					return nil, ctrlInvalid
-				}
-			default:
-				buffer.WriteRune(rune)
+		default:
+			s.index--
+			s.reader.UnreadRune()
+			node, err := s.readTextNode()
+			if err != nil {
+				return err
+			}
+			if node.Len() > 0 {
+				p.AppendNode(node)
 			}
 		}
 	}
-	return nil, ctrlEOF
+	// Unreachable.
+	panic("unreachable")
+}
+
+// readTagOrRawNode checks if the opening is for a tag node or
+// for a raw node and starts the reading of it.
+func (s *smlReader) readTagOrRawNode() (Node, error) {
+	_, rc, err := s.readRune()
+	switch {
+	case err != nil:
+		return nil, err
+	case rc == rcEOF:
+		return nil, fmt.Errorf("unexpected end of file while reading a tag or raw node")
+	case rc == rcTag:
+		s.index--
+		s.reader.UnreadRune()
+		return s.readTagNode()
+	case rc == rcExclamation:
+		return s.readRawNode()
+	}
+	return nil, fmt.Errorf("invalid rune after opening at index %d", s.index)
+}
+
+// readRawNode reads a raw node.
+func (s *smlReader) readRawNode() (*RawNode, error) {
+	var buf bytes.Buffer
+	for {
+		r, rc, err := s.readRune()
+		switch {
+		case err != nil:
+			return nil, err
+		case rc == rcEOF:
+			return nil, fmt.Errorf("unexpected end of file while reading a raw node")
+		case rc == rcExclamation:
+			r, rc, err = s.readRune()
+			switch {
+			case err != nil:
+				return nil, err
+			case rc == rcEOF:
+				return nil, fmt.Errorf("unexpected end of file while reading a raw node")
+			case rc == rcClose:
+				return NewRawNode(buf.String()), nil
+			}
+			buf.WriteRune('!')
+			buf.WriteRune(r)
+		default:
+			buf.WriteRune(r)
+		}
+	}
+	// Unreachable.
+	panic("unreachable")
+}
+
+// readTextNode reads a text node.
+func (s *smlReader) readTextNode() (*TextNode, error) {
+	var buf bytes.Buffer
+	for {
+		r, rc, err := s.readRune()
+		switch {
+		case err != nil:
+			return nil, err
+		case rc == rcEOF:
+			return nil, fmt.Errorf("unexpected end of file while reading a text node")
+		case rc == rcOpen || rc == rcClose:
+			s.index--
+			s.reader.UnreadRune()
+			return NewTextNode(buf.String()), nil
+		case rc == rcEscape:
+			r, rc, err = s.readRune()
+			switch {
+			case err != nil:
+				return nil, err
+			case rc == rcEOF:
+				return nil, fmt.Errorf("unexpected end of file while reading a text node")
+			case rc == rcOpen || rc == rcClose || rc == rcEscape:
+				buf.WriteRune(r)
+			default:
+				return nil, fmt.Errorf("invalid rune after escape at index %d", s.index)
+			}
+		default:
+			buf.WriteRune(r)
+		}
+	}
+	// Unreachable.
+	panic("unreachable")
 }
 
 // Reads one rune of the reader.
-func (sr *SmlReader) readRune() (r rune, ctrl int) {
+func (s *smlReader) readRune() (r rune, rc int, err error) {
 	var size int
-	r, size, sr.error = sr.reader.ReadRune()
+	s.index++
+	r, size, err = s.reader.ReadRune()
+	if err != nil {
+		return 0, 0, err
+	}
 	switch {
 	case size == 0:
-		return r, ctrlEOF
+		rc = rcEOF
 	case r == '{':
-		return r, ctrlOpen
+		rc = rcOpen
 	case r == '}':
-		return r, ctrlClose
+		rc = rcClose
 	case r == '^':
-		return r, ctrlEscape
+		rc = rcEscape
+	case r == '!':
+		rc = rcExclamation
 	case r >= 'a' && r <= 'z':
-		return r, ctrlTag
+		rc = rcTag
 	case r >= 'A' && r <= 'Z':
-		return r, ctrlTag
+		rc = rcTag
 	case r >= '0' && r <= '9':
-		return r, ctrlTag
-	case r == '-':
-		return r, ctrlTag
-	case r == ':':
-		return r, ctrlTag
+		rc = rcTag
+	case r == '-' || r == ':':
+		rc = rcTag
 	case unicode.IsSpace(r):
-		return r, ctrlSpace
+		rc = rcSpace
+	default:
+		rc = rcText
 	}
-	return r, ctrlText
+	return
 }
 
 //--------------------
 // SML WRITER PROCESSOR
 //--------------------
 
-// SmlWriterProcessor writes a SML document to a writer.
-type SmlWriterProcessor struct {
+// SMLWriterProcessor writes a SML document to a writer.
+type SMLWriterProcessor struct {
 	writer      *bufio.Writer
 	prettyPrint bool
 	indentLevel int
 }
 
-// NewSmlWriterProcessor creates a new writer for a SML document.
-func NewSmlWriterProcessor(writer io.Writer, prettyPrint bool) *SmlWriterProcessor {
-	swp := &SmlWriterProcessor{
+// NewSMLWriterProcessor creates a new writer for a SML document.
+func NewSMLWriterProcessor(writer io.Writer, prettyPrint bool) *SMLWriterProcessor {
+	return &SMLWriterProcessor{
 		writer:      bufio.NewWriter(writer),
 		prettyPrint: prettyPrint,
 		indentLevel: 0,
 	}
-	return swp
 }
 
 // OpenTag writes the opening of a tag.
-func (swp *SmlWriterProcessor) OpenTag(tag []string) {
-	swp.writeIndent(true)
-	swp.writer.WriteString("{")
-	swp.writer.WriteString(strings.Join(tag, ":"))
+func (p *SMLWriterProcessor) OpenTag(tag []string) {
+	p.writeIndent(true)
+	p.writer.WriteString("{")
+	p.writer.WriteString(strings.Join(tag, ":"))
 }
 
 // CloseTag writes the closing of a tag.
-func (swp *SmlWriterProcessor) CloseTag(tag []string) {
-	swp.writer.WriteString("}")
-	if swp.prettyPrint {
-		swp.indentLevel--
+func (p *SMLWriterProcessor) CloseTag(tag []string) {
+	p.writer.WriteString("}")
+	if p.prettyPrint {
+		p.indentLevel--
 	}
-	swp.writer.Flush()
+	p.writer.Flush()
 }
 
 // Text writes a text with an encoding of special runes.
-func (swp *SmlWriterProcessor) Text(text string) {
-	ta := strings.Replace(text, "^", "^^", -1)
-	tb := strings.Replace(ta, "{", "^{", -1)
-	tc := strings.Replace(tb, "}", "^}", -1)
-	swp.writeIndent(false)
-	swp.writer.WriteString(tc)
+func (p *SMLWriterProcessor) Text(text string) {
+	t := strings.Replace(text, "^", "^^", -1)
+	t = strings.Replace(t, "{", "^{", -1)
+	t = strings.Replace(t, "}", "^}", -1)
+	p.writeIndent(false)
+	p.writer.WriteString(t)
+}
+
+// Raw write a raw data without any encoding.
+func (p *SMLWriterProcessor) Raw(raw string) {
+	p.writeIndent(false)
+	p.writer.WriteString("{! ")
+	p.writer.WriteString(raw)
+	p.writer.WriteString(" !}")
 }
 
 // writeIndent writes an indentation of wanted.
-func (swp *SmlWriterProcessor) writeIndent(increase bool) {
-	if swp.prettyPrint {
-		if swp.indentLevel > 0 {
-			swp.writer.WriteString("\n")
+func (p *SMLWriterProcessor) writeIndent(increase bool) {
+	if p.prettyPrint {
+		if p.indentLevel > 0 {
+			p.writer.WriteString("\n")
 		}
-		for i := 0; i < swp.indentLevel; i++ {
-			swp.writer.WriteString("\t")
+		for i := 0; i < p.indentLevel; i++ {
+			p.writer.WriteString("\t")
 		}
 		if increase {
-			swp.indentLevel++
+			p.indentLevel++
 		}
 	} else {
-		swp.writer.WriteString(" ")
+		p.writer.WriteString(" ")
 	}
 }
 

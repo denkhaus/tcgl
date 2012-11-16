@@ -9,7 +9,7 @@
 // of LISP like notation with curly braces. 
 //
 // The tag only consists out of the chars 'a' to 'z', '0' to '9' 
-// and '-'. Also several parts of the tagcan be seperated by colons.
+// and '-'. Also several parts of the tag can be seperated by colons.
 // The package contains a kind of DOM as well as a parser and a
 // processor. The latter is used for printing SML documents.
 package markup
