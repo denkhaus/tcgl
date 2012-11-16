@@ -24,7 +24,7 @@ import (
 //--------------------
 
 // Test creating.
-func TestSmlCreating(t *testing.T) {
+func TestSMLCreating(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	root := createSMLStructure()
 	assert.Equal(root.Tag(), "root", "Root tag has to be 'root'.")
@@ -37,11 +37,9 @@ func TestSMLWriterProcessing(t *testing.T) {
 	root := createSMLStructure()
 	bufA := bytes.NewBufferString("")
 	bufB := bytes.NewBufferString("")
-	sppA := markup.NewSMLWriterProcessor(bufA, true)
-	sppB := markup.NewSMLWriterProcessor(bufB, false)
 
-	root.ProcessWith(sppA)
-	root.ProcessWith(sppB)
+	markup.WriteSML(root, bufA, true)
+	markup.WriteSML(root, bufB, false)
 
 	println("===== WITH INDENT =====")
 	println(bufA.String())
@@ -57,15 +55,15 @@ func TestSMLWriterProcessing(t *testing.T) {
 func TestSMLPositiveReading(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	sml := "Before!   {foo {bar:1:first Yadda ^{Test^} 1} {! Raw: }} { ! ^^^ !}  {inbetween}  {bar:2:last Yadda {Test ^^} 2}}   After!"
-	root, err := markup.ReadSML(strings.NewReader(sml))
+	builder := markup.NewNodeBuilder()
+	err := markup.ReadSML(strings.NewReader(sml), builder)
 	assert.Nil(err, "Expected no reader error.")
+	root := builder.Root()
 	assert.Equal(root.Tag(), "foo", "Root tag is 'foo'.")
 	assert.NotEmpty(root, "Root tag is not empty.")
 
 	buf := bytes.NewBufferString("")
-	spp := markup.NewSMLWriterProcessor(buf, true)
-
-	root.ProcessWith(spp)
+	markup.WriteSML(root, buf, true)
 
 	println("===== PARSED SML =====")
 	println(buf.String())
@@ -76,7 +74,8 @@ func TestSMLPositiveReading(t *testing.T) {
 func TestSMLNegativeReading(t *testing.T) {
 	assert := asserts.NewTestingAsserts(t, true)
 	sml := "{Foo {bar:1 Yadda {test} {} 1} {bar:2 Yadda 2}}"
-	_, err := markup.ReadSML(strings.NewReader(sml))
+	builder := markup.NewNodeBuilder()
+	err := markup.ReadSML(strings.NewReader(sml), builder)
 	assert.ErrorMatch(err, "invalid rune.*", "Invalid rune should be found.")
 }
 
