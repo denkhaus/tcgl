@@ -1,8 +1,8 @@
 // Tideland Common Go Library - Redis - Result Sets
 //
-// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2013 Frank Mueller / Oldenburg / Germany
 //
-// All rights reserved. Use of this source code is governed 
+// All rights reserved. Use of this source code is governed
 // by the new BSD license.
 
 package redis

@@ -1,8 +1,8 @@
 // Tideland Common Go Library - Redis - Unified Request Protocol
 //
-// Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
+// Copyright (C) 2009-2013 Frank Mueller / Oldenburg / Germany
 //
-// All rights reserved. Use of this source code is governed 
+// All rights reserved. Use of this source code is governed
 // by the new BSD license.
 
 package redis
@@ -102,15 +102,8 @@ func newUnifiedRequestProtocol(db *Database) (*unifiedRequestProtocol, error) {
 	// Start goroutines.
 	go urp.receiver()
 	go urp.backend()
-	// Select database.
-	rs := newResultSet("select")
-	urp.command(rs, false, "select", db.configuration.Database)
-	if !rs.IsOK() {
-		// Connection or database is not ok, so reset.
-		urp.stop()
-		return nil, rs.Error()
-	}
 	// Authenticate if needed.
+	var rs *ResultSet
 	if db.configuration.Auth != "" {
 		rs = newResultSet("auth")
 		urp.command(rs, false, "auth", db.configuration.Auth)
@@ -119,6 +112,14 @@ func newUnifiedRequestProtocol(db *Database) (*unifiedRequestProtocol, error) {
 			urp.stop()
 			return nil, rs.Error()
 		}
+	}
+	// Select database.
+	rs = newResultSet("select")
+	urp.command(rs, false, "select", db.configuration.Database)
+	if !rs.IsOK() {
+		// Connection or database is not ok, so reset.
+		urp.stop()
+		return nil, rs.Error()
 	}
 	return urp, nil
 }
