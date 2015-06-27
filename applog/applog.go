@@ -230,7 +230,7 @@ func Errorf(format string, args ...interface{}) {
 		ci := retrieveCallInfo()
 		fi := fmt.Sprintf(format, args...)
 
-		logger.Error(ci.verboseFormat(), fi)
+		logger.Error(ci.shortFormat(), fi)
 	}
 }
 
