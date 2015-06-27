@@ -2,7 +2,7 @@
 //
 // Copyright (C) 2012 Frank Mueller / Oldenburg / Germany
 //
-// All rights reserved. Use of this source code is governed 
+// All rights reserved. Use of this source code is governed
 // by the new BSD license.
 
 package applog
@@ -21,6 +21,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"bitbucket.org/denkhaus/mirsvc/util"
 )
 
 //--------------------
@@ -228,9 +230,10 @@ func Warningf(format string, args ...interface{}) {
 func Errorf(format string, args ...interface{}) {
 	if level <= LevelError {
 		ci := retrieveCallInfo()
+		util.Inspect(ci)
 		fi := fmt.Sprintf(format, args...)
 
-		logger.Error(ci.shortFormat(), fi)
+		logger.Error(ci.verboseFormat(), fi)
 	}
 }
 
@@ -265,7 +268,7 @@ func (ci *callInfo) verboseFormat() string {
 	return fmt.Sprintf("[%s] (%s:%s:%d)", ci.packageName, ci.fileName, ci.funcName, ci.line)
 }
 
-// retrieveCallInfo 
+// retrieveCallInfo
 func retrieveCallInfo() *callInfo {
 	pc, file, line, _ := runtime.Caller(2)
 	_, fileName := path.Split(file)
