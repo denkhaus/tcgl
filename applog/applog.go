@@ -21,8 +21,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"bitbucket.org/denkhaus/mirsvc/util"
 )
 
 //--------------------
@@ -230,7 +228,6 @@ func Warningf(format string, args ...interface{}) {
 func Errorf(format string, args ...interface{}) {
 	if level <= LevelError {
 		ci := retrieveCallInfo()
-		util.Inspect(ci)
 		fi := fmt.Sprintf(format, args...)
 
 		logger.Error(ci.verboseFormat(), fi)
