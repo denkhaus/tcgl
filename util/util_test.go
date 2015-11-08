@@ -12,7 +12,7 @@ package util
 //--------------------
 
 import (
-	"cgl.tideland.biz/asserts"
+	"github.com/denkhaus/tcgl/asserts"
 	"testing"
 )
 

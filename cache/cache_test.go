@@ -2,7 +2,7 @@
 //
 // Copyright (C) 2009-2012 Frank Mueller / Oldenburg / Germany
 //
-// All rights reserved. Use of this source code is governed 
+// All rights reserved. Use of this source code is governed
 // by the new BSD license.
 
 package cache
@@ -12,9 +12,10 @@ package cache
 //--------------------
 
 import (
-	"cgl.tideland.biz/asserts"
 	"testing"
 	"time"
+
+	"github.com/denkhaus/tcgl/asserts"
 )
 
 //--------------------

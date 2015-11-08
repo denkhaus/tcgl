@@ -12,8 +12,8 @@ package supervisor_test
 //--------------------
 
 import (
-	"cgl.tideland.biz/asserts"
-	"cgl.tideland.biz/supervisor"
+	"github.com/denkhaus/tcgl/asserts"
+	"github.com/denkhaus/tcgl/supervisor"
 	"fmt"
 	"sort"
 	"sync"

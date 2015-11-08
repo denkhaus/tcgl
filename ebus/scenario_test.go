@@ -12,11 +12,11 @@ package ebus_test
 //--------------------
 
 import (
-	"cgl.tideland.biz/applog"
-	"cgl.tideland.biz/asserts"
-	"cgl.tideland.biz/config"
-	"cgl.tideland.biz/ebus"
-	"cgl.tideland.biz/monitoring"
+	"github.com/denkhaus/tcgl/applog"
+	"github.com/denkhaus/tcgl/asserts"
+	"github.com/denkhaus/tcgl/config"
+	"github.com/denkhaus/tcgl/ebus"
+	"github.com/denkhaus/tcgl/monitoring"
 	"fmt"
 	"math/rand"
 	"testing"

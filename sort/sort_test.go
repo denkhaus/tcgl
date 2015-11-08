@@ -12,7 +12,7 @@ package sort
 //--------------------
 
 import (
-	"cgl.tideland.biz/asserts"
+	"github.com/denkhaus/tcgl/asserts"
 	"math/rand"
 	"sort"
 	"testing"

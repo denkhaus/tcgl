@@ -12,8 +12,8 @@ package worm_test
 //--------------------
 
 import (
-	"cgl.tideland.biz/asserts"
-	"cgl.tideland.biz/worm"
+	"github.com/denkhaus/tcgl/asserts"
+	"github.com/denkhaus/tcgl/worm"
 	"testing"
 )
 

@@ -13,8 +13,8 @@ package ebus
 
 import (
 	"bytes"
-	"cgl.tideland.biz/applog"
-	"cgl.tideland.biz/monitoring"
+	"github.com/denkhaus/tcgl/applog"
+	"github.com/denkhaus/tcgl/monitoring"
 	"encoding/gob"
 	"fmt"
 	"strings"

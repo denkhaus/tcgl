@@ -2,7 +2,7 @@
 //
 // Copyright (C) 2012 Frank Mueller / Oldenburg / Germany
 //
-// All rights reserved. Use of this source code is governed 
+// All rights reserved. Use of this source code is governed
 // by the new BSD license.
 
 package applog_test
@@ -12,11 +12,12 @@ package applog_test
 //--------------------
 
 import (
-	"cgl.tideland.biz/applog"
-	"cgl.tideland.biz/asserts"
 	"log"
 	"os"
 	"testing"
+
+	"github.com/denkhaus/tcgl/applog"
+	"github.com/denkhaus/tcgl/asserts"
 )
 
 //--------------------
@@ -67,7 +68,7 @@ func TestWarningAndAbove(t *testing.T) {
 // Test logging with the go logger.
 func TestGoLogger(t *testing.T) {
 	log.SetOutput(os.Stdout)
-	
+
 	applog.SetLevel(applog.LevelDebug)
 	applog.SetLogger(applog.GoLogger{})
 
@@ -104,20 +105,20 @@ type testLogger struct {
 }
 
 func (tl *testLogger) Debug(info, msg string) {
-	tl.logs = append(tl.logs, info + " " + msg)
+	tl.logs = append(tl.logs, info+" "+msg)
 }
 
 func (tl *testLogger) Info(info, msg string) {
-	tl.logs = append(tl.logs, info + " " + msg)
+	tl.logs = append(tl.logs, info+" "+msg)
 }
 func (tl *testLogger) Warning(info, msg string) {
-	tl.logs = append(tl.logs, info + " " + msg)
+	tl.logs = append(tl.logs, info+" "+msg)
 }
 func (tl *testLogger) Error(info, msg string) {
-	tl.logs = append(tl.logs, info + " " + msg)
+	tl.logs = append(tl.logs, info+" "+msg)
 }
 func (tl *testLogger) Critical(info, msg string) {
-	tl.logs = append(tl.logs, info + " " + msg)
+	tl.logs = append(tl.logs, info+" "+msg)
 }
 
 // EOF

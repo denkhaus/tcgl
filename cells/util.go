@@ -12,7 +12,7 @@ package cells
 //--------------------
 
 import (
-	"cgl.tideland.biz/identifier"
+	"github.com/denkhaus/tcgl/identifier"
 	"fmt"
 	"sync"
 	"time"

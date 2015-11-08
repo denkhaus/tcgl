@@ -12,8 +12,8 @@ package net_test
 //--------------------
 
 import (
-	"cgl.tideland.biz/asserts"
-	"cgl.tideland.biz/net"
+	"github.com/denkhaus/tcgl/asserts"
+	"github.com/denkhaus/tcgl/net"
 	"testing"
 )
 

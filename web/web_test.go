@@ -12,8 +12,8 @@ package web
 //--------------------
 
 import (
-	"cgl.tideland.biz/applog"
-	"cgl.tideland.biz/asserts"
+	"github.com/denkhaus/tcgl/applog"
+	"github.com/denkhaus/tcgl/asserts"
 	"bytes"
 	"encoding/gob"
 	"encoding/json"

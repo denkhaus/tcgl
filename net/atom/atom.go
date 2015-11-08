@@ -12,7 +12,7 @@ package atom
 //--------------------
 
 import (
-	"cgl.tideland.biz/net"
+	"github.com/denkhaus/tcgl/net"
 	"encoding/xml"
 	"fmt"
 	"io"

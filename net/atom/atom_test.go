@@ -13,9 +13,9 @@ package atom_test
 
 import (
 	"bytes"
-	"cgl.tideland.biz/applog"
-	"cgl.tideland.biz/asserts"
-	"cgl.tideland.biz/net/atom"
+	"github.com/denkhaus/tcgl/applog"
+	"github.com/denkhaus/tcgl/asserts"
+	"github.com/denkhaus/tcgl/net/atom"
 	"net/url"
 	"testing"
 	"time"

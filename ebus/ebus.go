@@ -12,7 +12,7 @@ package ebus
 //--------------------
 
 import (
-	"cgl.tideland.biz/config"
+	"github.com/denkhaus/tcgl/config"
 	"fmt"
 )
 

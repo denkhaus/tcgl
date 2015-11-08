@@ -13,7 +13,7 @@ package mapreduce
 
 import (
 	"hash/adler32"
-	"cgl.tideland.biz/sort"
+	"github.com/denkhaus/tcgl/sort"
 )
 
 //--------------------

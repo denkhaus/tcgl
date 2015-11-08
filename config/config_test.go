@@ -12,8 +12,8 @@ package config_test
 //--------------------
 
 import (
-	"cgl.tideland.biz/asserts"
-	"cgl.tideland.biz/config"
+	"github.com/denkhaus/tcgl/asserts"
+	"github.com/denkhaus/tcgl/config"
 	"testing"
 	"time"
 )

@@ -13,8 +13,8 @@ package markup_test
 
 import (
 	"bytes"
-	"cgl.tideland.biz/asserts"
-	"cgl.tideland.biz/markup"
+	"github.com/denkhaus/tcgl/asserts"
+	"github.com/denkhaus/tcgl/markup"
 	"strings"
 	"testing"
 )

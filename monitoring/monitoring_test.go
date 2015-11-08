@@ -12,7 +12,7 @@ package monitoring
 //--------------------
 
 import (
-	"cgl.tideland.biz/asserts"
+	"github.com/denkhaus/tcgl/asserts"
 	"fmt"
 	"math/rand"
 	"testing"

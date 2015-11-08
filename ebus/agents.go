@@ -12,7 +12,7 @@ package ebus
 //--------------------
 
 import (
-	"cgl.tideland.biz/applog"
+	"github.com/denkhaus/tcgl/applog"
 )
 
 //--------------------

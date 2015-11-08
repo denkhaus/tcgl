@@ -12,7 +12,7 @@ package state
 //--------------------
 
 import (
-	"cgl.tideland.biz/asserts"
+	"github.com/denkhaus/tcgl/asserts"
 	"log"
 	"testing"
 	"time"

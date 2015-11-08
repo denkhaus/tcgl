@@ -12,9 +12,9 @@ package ebus
 //--------------------
 
 import (
-	"cgl.tideland.biz/applog"
-	"cgl.tideland.biz/asserts"
-	"cgl.tideland.biz/config"
+	"github.com/denkhaus/tcgl/applog"
+	"github.com/denkhaus/tcgl/asserts"
+	"github.com/denkhaus/tcgl/config"
 	"fmt"
 	"testing"
 	"time"

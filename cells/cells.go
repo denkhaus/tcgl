@@ -12,10 +12,10 @@ package cells
 //--------------------
 
 import (
-	"cgl.tideland.biz/applog"
-	"cgl.tideland.biz/config"
-	"cgl.tideland.biz/identifier"
-	"cgl.tideland.biz/monitoring"
+	"github.com/denkhaus/tcgl/applog"
+	"github.com/denkhaus/tcgl/config"
+	"github.com/denkhaus/tcgl/identifier"
+	"github.com/denkhaus/tcgl/monitoring"
 	"fmt"
 	"runtime"
 	"sync"
